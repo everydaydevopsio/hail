@@ -1,0 +1,46 @@
+name: Hail live email verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: hail-live
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.HAIL_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Write only the receiver configuration
+        env:
+          HAIL_CONFIG_JSON: ${{ secrets.HAIL_CONFIG_JSON }}
+        run: |
+          umask 077
+          printf '%s' "$HAIL_CONFIG_JSON" > "$RUNNER_TEMP/hail.config.json"
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: node dist/cli.js doctor
+        env:
+          HAIL_CONFIG: ${{ runner.temp }}/hail.config.json
+      - run: npm run test:live
+        env:
+          HAIL_CONFIG: ${{ runner.temp }}/hail.config.json
+          HAIL_FROM: ${{ vars.HAIL_FROM }}
+          HAIL_SEND_REGION: ${{ vars.HAIL_SEND_REGION || vars.AWS_REGION }}
+      - if: always()
+        run: rm -f "$RUNNER_TEMP/hail.config.json"

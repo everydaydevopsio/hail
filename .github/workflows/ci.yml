@@ -1,0 +1,93 @@
+name: Hail validation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hail-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+      - name: Test the packed consumer artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack --pack-destination "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/hail-consumer"
+          cd "$RUNNER_TEMP/hail-consumer"
+          npm init -y >/dev/null
+          npm install --ignore-scripts "$RUNNER_TEMP/everydaydevopsio-hail-0.1.0.tgz" @playwright/test
+          node --input-type=module -e "import {Hail} from '@everydaydevopsio/hail'; if (typeof Hail !== 'function') process.exit(1)"
+          node --input-type=module -e "import {test} from '@everydaydevopsio/hail/playwright'; if (typeof test !== 'function') process.exit(1)"
+          npx hail --help
+          test -f node_modules/@everydaydevopsio/hail/terraform/examples/cloudflare/main.tf
+          test -f node_modules/@everydaydevopsio/hail/terraform/modules/receiver/lambda/handler.py
+          test ! -d node_modules/@everydaydevopsio/hail/upstream
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests/python -v
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox
+      - run: npm run test:e2e
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: [terraform/modules/receiver, terraform/examples/cloudflare, terraform/examples/route53, terraform/examples/manual]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+      - run: terraform fmt -check -recursive terraform
+      - run: terraform -chdir=${{ matrix.directory }} init -backend=false -lockfile=readonly
+      - run: terraform -chdir=${{ matrix.directory }} validate
+      - if: matrix.directory == 'terraform/modules/receiver'
+        run: terraform -chdir=${{ matrix.directory }} test
