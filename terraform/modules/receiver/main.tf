@@ -52,13 +52,13 @@ resource "aws_s3_bucket_policy" "emails" {
   bucket = aws_s3_bucket.emails.id
   policy = jsonencode({ Version = "2012-10-17", Statement = [
     {
-      Sid = "AllowSESWrite", Effect = "Allow", Principal = { Service = "ses.amazonaws.com" },
-      Action = "s3:PutObject", Resource = "${aws_s3_bucket.emails.arn}/incoming/*",
+      Sid       = "AllowSESWrite", Effect = "Allow", Principal = { Service = "ses.amazonaws.com" },
+      Action    = "s3:PutObject", Resource = "${aws_s3_bucket.emails.arn}/incoming/*",
       Condition = { StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id, "aws:SourceArn" = local.rule_arn } }
     },
     {
-      Sid = "DenyInsecureTransport", Effect = "Deny", Principal = "*", Action = "s3:*",
-      Resource = [aws_s3_bucket.emails.arn, "${aws_s3_bucket.emails.arn}/*"],
+      Sid       = "DenyInsecureTransport", Effect = "Deny", Principal = "*", Action = "s3:*",
+      Resource  = [aws_s3_bucket.emails.arn, "${aws_s3_bucket.emails.arn}/*"],
       Condition = { Bool = { "aws:SecureTransport" = "false" } }
     }
   ] })
@@ -70,7 +70,7 @@ resource "aws_sns_topic" "received" {
 resource "aws_sns_topic_policy" "received" {
   arn = aws_sns_topic.received.arn
   policy = jsonencode({ Version = "2012-10-17", Statement = [{
-    Effect = "Allow", Principal = { Service = "ses.amazonaws.com" }, Action = "sns:Publish", Resource = aws_sns_topic.received.arn,
+    Effect    = "Allow", Principal = { Service = "ses.amazonaws.com" }, Action = "sns:Publish", Resource = aws_sns_topic.received.arn,
     Condition = { StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id, "aws:SourceArn" = local.rule_arn } }
   }] })
 }
@@ -85,13 +85,13 @@ resource "aws_sqs_queue" "ingestion" {
   visibility_timeout_seconds = 180
   message_retention_seconds  = 259200
   sqs_managed_sse_enabled    = true
-  redrive_policy = jsonencode({ deadLetterTargetArn = aws_sqs_queue.dlq.arn, maxReceiveCount = 5 })
-  tags = local.tags
+  redrive_policy             = jsonencode({ deadLetterTargetArn = aws_sqs_queue.dlq.arn, maxReceiveCount = 5 })
+  tags                       = local.tags
 }
 resource "aws_sqs_queue_policy" "ingestion" {
   queue_url = aws_sqs_queue.ingestion.url
   policy = jsonencode({ Version = "2012-10-17", Statement = [{
-    Effect = "Allow", Principal = { Service = "sns.amazonaws.com" }, Action = "sqs:SendMessage", Resource = aws_sqs_queue.ingestion.arn,
+    Effect    = "Allow", Principal = { Service = "sns.amazonaws.com" }, Action = "sqs:SendMessage", Resource = aws_sqs_queue.ingestion.arn,
     Condition = { ArnEquals = { "aws:SourceArn" = aws_sns_topic.received.arn } }
   }] })
 }
@@ -145,10 +145,10 @@ resource "aws_lambda_function" "indexer" {
 }
 resource "aws_lambda_event_source_mapping" "ingestion" {
   event_source_arn        = aws_sqs_queue.ingestion.arn
-  function_name          = aws_lambda_function.indexer.arn
-  batch_size             = 10
+  function_name           = aws_lambda_function.indexer.arn
+  batch_size              = 10
   function_response_types = ["ReportBatchItemFailures"]
-  depends_on             = [aws_iam_role_policy.indexer]
+  depends_on              = [aws_iam_role_policy.indexer]
 }
 resource "aws_ses_domain_identity" "receiver" {
   domain = var.domain

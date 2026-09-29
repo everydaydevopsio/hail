@@ -4,13 +4,28 @@
   "description": "Playwright-native testing for real application email workflows",
   "type": "module",
   "license": "ISC",
-  "engines": { "node": ">=22" },
-  "bin": { "hail": "dist/cli.js" },
-  "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./playwright": { "types": "./dist/playwright.d.ts", "import": "./dist/playwright.js" }
+  "engines": {
+    "node": ">=22"
   },
-  "files": ["dist", "terraform", "README.md", "LICENSE"],
+  "bin": {
+    "hail": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./playwright": {
+      "types": "./dist/playwright.d.ts",
+      "import": "./dist/playwright.js"
+    }
+  },
+  "files": [
+    "dist",
+    "terraform",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
@@ -28,8 +43,14 @@
     "cheerio": "^1.0.0",
     "mailparser": "^3.7.0"
   },
-  "peerDependencies": { "@playwright/test": ">=1.55.0 <2" },
-  "peerDependenciesMeta": { "@playwright/test": { "optional": true } },
+  "peerDependencies": {
+    "@playwright/test": ">=1.55.0 <2"
+  },
+  "peerDependenciesMeta": {
+    "@playwright/test": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/mailparser": "^3.4.6",

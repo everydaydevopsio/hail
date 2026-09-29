@@ -94,14 +94,14 @@ Manual DNS mode prints the required MX and TXT records with `terraform output dn
 Set Playwright's `use.baseURL` to your application. Replace selectors and expected states with your app's actual contract.
 
 ```typescript
-import { test, expect } from '@everydaydevopsio/hail/playwright';
+import { test, expect } from "@everydaydevopsio/hail/playwright";
 
-test('sign in using the delivered magic link', async ({ page, inbox }) => {
+test("sign in using the delivered magic link", async ({ page, inbox }) => {
   test.setTimeout(90_000);
-  await page.goto('/login');
+  await page.goto("/login");
   const after = await inbox.checkpoint();
-  await page.getByLabel('Email').fill(inbox.address);
-  await page.getByRole('button', { name: /send magic link/i }).click();
+  await page.getByLabel("Email").fill(inbox.address);
+  await page.getByRole("button", { name: /send magic link/i }).click();
 
   const email = await inbox.waitForEmail({
     after,
@@ -109,8 +109,12 @@ test('sign in using the delivered magic link', async ({ page, inbox }) => {
     timeoutMs: 60_000,
   });
   const origin = new URL(page.url()).origin;
-  await page.goto(email.getLink({ text: /sign in/i, allowedOrigins: [origin] }));
-  await expect(page.getByTestId('current-user-email')).toHaveText(inbox.address);
+  await page.goto(
+    email.getLink({ text: /sign in/i, allowedOrigins: [origin] }),
+  );
+  await expect(page.getByTestId("current-user-email")).toHaveText(
+    inbox.address,
+  );
 });
 ```
 
@@ -119,9 +123,9 @@ Continue magic-link flows in the requesting browser when your app binds a reques
 ### Core API
 
 ```typescript
-import { Hail, loadConfig } from '@everydaydevopsio/hail';
+import { Hail, loadConfig } from "@everydaydevopsio/hail";
 const hail = new Hail(await loadConfig());
-const inbox = hail.createInbox('login');
+const inbox = hail.createInbox("login");
 const after = await inbox.checkpoint();
 // Trigger your application's send here.
 const email = await inbox.waitForEmail({ after, subject: /sign in/i });
