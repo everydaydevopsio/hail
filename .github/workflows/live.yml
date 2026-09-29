@@ -41,6 +41,6 @@ jobs:
         env:
           HAIL_CONFIG: ${{ runner.temp }}/hail.config.json
           HAIL_FROM: ${{ vars.HAIL_FROM }}
-          HAIL_SEND_REGION: ${{ vars.HAIL_SEND_REGION }}
+          HAIL_SEND_REGION: ${{ vars.HAIL_SEND_REGION || vars.AWS_REGION }}
       - if: always()
         run: rm -f "$RUNNER_TEMP/hail.config.json"

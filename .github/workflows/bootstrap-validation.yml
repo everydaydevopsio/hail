@@ -23,19 +23,20 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: '1.9.8'
-      - name: Lock dependencies and format source
+      - name: Lock dependencies and format source without modifying workflow definitions
         run: |
           set -euo pipefail
           npm install --ignore-scripts
           npm run format
+          git restore .github/workflows/ci.yml
           terraform fmt -recursive terraform
           for directory in terraform/modules/receiver terraform/examples/cloudflare terraform/examples/route53 terraform/examples/manual; do
             terraform -chdir="$directory" init -backend=false
           done
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add package-lock.json package.json tsconfig.json tsconfig.build.json playwright.config.ts src tests README.md docs terraform .github/workflows/ci.yml
+          git add package-lock.json package.json tsconfig.json tsconfig.build.json playwright.config.ts src tests README.md docs terraform
           if ! git diff --cached --quiet; then
-            git commit -m 'chore: lock dependencies and format the validated integration'
+            git commit -m 'chore: lock dependencies and format the Hail integration'
             git push origin HEAD:feat/hail-playwright-validation
           fi
