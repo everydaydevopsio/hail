@@ -11,5 +11,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "playwright.config.ts"],
-  "exclude": ["upstream", "node_modules", "dist"]
+  "exclude": ["upstream", "node_modules", "dist", "tests/consumer"]
 }

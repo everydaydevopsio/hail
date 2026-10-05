@@ -46,6 +46,21 @@ variable "reader_principal_arns" {
   type    = list(string)
   default = []
 }
+variable "external_indexer_role_arn" {
+  type        = string
+  default     = null
+  description = "Precreated Lambda execution role. Set with external_reader_role_arn to suppress module IAM creation."
+}
+variable "external_reader_role_arn" {
+  type        = string
+  default     = null
+  description = "Precreated reader role. Set with external_indexer_role_arn to suppress module IAM creation."
+}
+variable "permissions_boundary_arn" {
+  type        = string
+  default     = null
+  description = "Permissions boundary for module-created IAM roles."
+}
 variable "tags" {
   type    = map(string)
   default = {}

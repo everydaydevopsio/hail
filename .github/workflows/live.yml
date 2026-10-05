@@ -13,34 +13,54 @@ jobs:
     runs-on: ubuntu-latest
     environment: hail-live
     timeout-minutes: 20
+    env:
+      HAIL_EXPECTED_ACCOUNT: ${{ vars.HAIL_EXPECTED_ACCOUNT }}
+      HAIL_READER_ROLE_ARN: ${{ vars.HAIL_READER_ROLE_ARN }}
+      HAIL_SENDER_ROLE_ARN: ${{ vars.HAIL_SENDER_ROLE_ARN }}
+      HAIL_FROM: ${{ vars.HAIL_FROM }}
+      HAIL_SEND_REGION: ${{ vars.HAIL_SEND_REGION || vars.AWS_REGION }}
+      HAIL_CONFIG: ${{ runner.temp }}/hail-live/hail.config.json
+      HAIL_READER_SESSION_FILE: ${{ runner.temp }}/hail-live/reader.json
+      HAIL_SENDER_SESSION_FILE: ${{ runner.temp }}/hail-live/sender.json
+      HAIL_LIVE_RUN_DIR: ${{ runner.temp }}/hail-live
     steps:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
       - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
-      - uses: aws-actions/configure-aws-credentials@v4
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: mkdir -m 700 "$HAIL_LIVE_RUN_DIR"
+      - name: Assume restricted reader using protected-environment OIDC
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.HAIL_AWS_ROLE_ARN }}
+          role-to-assume: ${{ vars.HAIL_READER_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+          role-duration-seconds: 3600
+          role-session-name: hail-reader-${{ github.run_id }}
+          unset-current-credentials: true
+      - run: node scripts/write-restricted-session.mjs "$HAIL_READER_SESSION_FILE"
       - name: Write only the receiver configuration
         env:
           HAIL_CONFIG_JSON: ${{ secrets.HAIL_CONFIG_JSON }}
         run: |
           umask 077
-          printf '%s' "$HAIL_CONFIG_JSON" > "$RUNNER_TEMP/hail.config.json"
-      - run: npm ci
-      - run: npm run build
-      - run: npx playwright install --with-deps chromium
+          printf '%s' "$HAIL_CONFIG_JSON" | jq 'del(.roleArn)' > "$HAIL_CONFIG"
       - run: node dist/cli.js doctor
-        env:
-          HAIL_CONFIG: ${{ runner.temp }}/hail.config.json
-      - run: npm run test:live
-        env:
-          HAIL_CONFIG: ${{ runner.temp }}/hail.config.json
-          HAIL_FROM: ${{ vars.HAIL_FROM }}
-          HAIL_SEND_REGION: ${{ vars.HAIL_SEND_REGION || vars.AWS_REGION }}
+      - name: Assume restricted synthetic sender using protected-environment OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.HAIL_SENDER_ROLE_ARN }}
+          aws-region: ${{ vars.HAIL_SEND_REGION || vars.AWS_REGION }}
+          role-duration-seconds: 3600
+          role-session-name: hail-sender-${{ github.run_id }}
+          unset-current-credentials: true
+      - run: node scripts/write-restricted-session.mjs "$HAIL_SENDER_SESSION_FILE"
+      - name: Run bounded live browser matrix with explicit sessions
+        run: env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN -u AWS_PROFILE -u AWS_ROLE_ARN -u AWS_WEB_IDENTITY_TOKEN_FILE AWS_EC2_METADATA_DISABLED=true npm run test:live
       - if: always()
-        run: rm -f "$RUNNER_TEMP/hail.config.json"
+        run: rm -f "$HAIL_READER_SESSION_FILE" "$HAIL_SENDER_SESSION_FILE" "$HAIL_CONFIG"

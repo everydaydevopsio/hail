@@ -129,7 +129,16 @@ export class Inbox {
       }
     } catch (error) {
       if (options.signal?.aborted) throw options.signal.reason;
-      if (!expiry.aborted) throw error;
+      if (
+        !expiry.aborted ||
+        (error !== expiry.reason &&
+          !(
+            error instanceof Error &&
+            error.name === "AbortError" &&
+            signal.aborted
+          ))
+      )
+        throw error;
     }
     throw new EmailTimeoutError(timeoutMs);
   }

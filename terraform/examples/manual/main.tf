@@ -23,6 +23,22 @@ variable "reader_principal_arns" {
   type    = list(string)
   default = []
 }
+variable "external_indexer_role_arn" {
+  type    = string
+  default = null
+}
+variable "external_reader_role_arn" {
+  type    = string
+  default = null
+}
+variable "permissions_boundary_arn" {
+  type    = string
+  default = null
+}
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
 resource "terraform_data" "guard" {
   input = var.domain
   lifecycle {
@@ -41,6 +57,10 @@ module "receiver" {
   manage_rule_set_activation = var.manage_rule_set_activation
   retention_days             = var.retention_days
   reader_principal_arns      = var.reader_principal_arns
+  external_indexer_role_arn  = var.external_indexer_role_arn
+  external_reader_role_arn   = var.external_reader_role_arn
+  permissions_boundary_arn   = var.permissions_boundary_arn
+  tags                       = var.tags
   depends_on                 = [terraform_data.guard]
 }
 # Manual mode deliberately does not wait for DNS during apply.

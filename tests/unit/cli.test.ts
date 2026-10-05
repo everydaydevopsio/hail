@@ -8,9 +8,9 @@ import { promisify } from "node:util";
 import { config } from "../helpers/memory-store.js";
 
 const execute = promisify(execFile);
-const cli = resolve("src/cli.ts");
+const cli = resolve("dist/cli.js");
 const run = (args: string[], options = {}) =>
-  execute(process.execPath, ["--import", "tsx", cli, ...args], {
+  execute(process.execPath, [cli, ...args], {
     timeout: 10_000,
     ...options,
   });

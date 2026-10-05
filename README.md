@@ -13,7 +13,7 @@ Playwright-native tests for magic-link logins, invitations, one-time codes, and 
 - `hail init`, `hail configure`, and read-only `hail doctor` commands.
 - Terraform receiver and Cloudflare, Route53, and manual-DNS templates. No long-lived server, database, or Kubernetes cluster.
 - One retryable SES → S3/SNS → SQS → Lambda ingestion path. The worker retains raw MIME and publishes idempotent recipient metadata. Failed records reach the ingestion DLQ.
-- Unit, Python worker, Terraform mock, package, and Chromium/Firefox workflow tests.
+- Unit, Python worker, Terraform mock, package, and Chromium/Firefox/WebKit workflow tests.
 
 The application keeps its existing email sender. No mailbox or Terraform apply is needed per test. Unique addresses prevent accidental collisions; they are not an IAM isolation boundary.
 
@@ -27,7 +27,7 @@ npm run build
 npm run typecheck
 npm test
 npm run test:python
-npx playwright install --with-deps chromium firefox
+npx playwright install --with-deps chromium firefox webkit
 npm run test:e2e
 
 terraform -chdir=terraform/modules/receiver init -backend=false
@@ -40,6 +40,7 @@ The browser tests use a loopback-only demo application and an in-memory MIME sto
 ## Install from this checkout
 
 The package is named `@everydaydevopsio/hail`, but has not been published by this change.
+Its JavaScript entry points are ESM; use an ESM consumer project (`"type": "module"`) for Playwright TypeScript specs.
 
 ```bash
 npm ci
@@ -94,7 +95,7 @@ Manual DNS mode prints the required MX and TXT records with `terraform output dn
 Set Playwright's `use.baseURL` to your application. Replace selectors and expected states with your app's actual contract.
 
 ```typescript
-import { test, expect } from "@everydaydevopsio/hail/playwright";
+import { test, expect, visitAuthLink } from "@everydaydevopsio/hail/playwright";
 
 test("sign in using the delivered magic link", async ({ page, inbox }) => {
   test.setTimeout(90_000);
@@ -109,7 +110,8 @@ test("sign in using the delivered magic link", async ({ page, inbox }) => {
     timeoutMs: 60_000,
   });
   const origin = new URL(page.url()).origin;
-  await page.goto(
+  await visitAuthLink(
+    page,
     email.getLink({ text: /sign in/i, allowedOrigins: [origin] }),
   );
   await expect(page.getByTestId("current-user-email")).toHaveText(

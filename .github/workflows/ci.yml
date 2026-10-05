@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        node: ['22', '24']
+        node: ["22", "24"]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -32,6 +32,7 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:package
       - name: Test the packed consumer artifact
         shell: bash
         run: |
@@ -40,10 +41,13 @@ jobs:
           mkdir "$RUNNER_TEMP/hail-consumer"
           cd "$RUNNER_TEMP/hail-consumer"
           npm init -y >/dev/null
-          npm install --ignore-scripts "$RUNNER_TEMP/everydaydevopsio-hail-0.1.0.tgz" @playwright/test
+          npm install --ignore-scripts "$RUNNER_TEMP/everydaydevopsio-hail-0.1.0.tgz" @playwright/test@1.63.0 typescript@5.9.3
+          cp "$GITHUB_WORKSPACE/tests/consumer/check.ts" ./check.ts
+          npx tsc --noEmit --module NodeNext --moduleResolution NodeNext --target ESNext check.ts
           node --input-type=module -e "import {Hail} from '@everydaydevopsio/hail'; if (typeof Hail !== 'function') process.exit(1)"
           node --input-type=module -e "import {test} from '@everydaydevopsio/hail/playwright'; if (typeof test !== 'function') process.exit(1)"
           npx hail --help
+          if npx hail does-not-exist; then exit 1; fi
           test -f node_modules/@everydaydevopsio/hail/terraform/examples/cloudflare/main.tf
           test -f node_modules/@everydaydevopsio/hail/terraform/modules/receiver/lambda/handler.py
           test ! -d node_modules/@everydaydevopsio/hail/upstream
@@ -56,7 +60,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - run: python -m unittest discover -s tests/python -v
   browser:
     runs-on: ubuntu-latest
@@ -67,27 +71,45 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium firefox
+      - run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run test:e2e
+      - name: Test packed browser workflows in a clean consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack --pack-destination "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/hail-browser-consumer"
+          cd "$RUNNER_TEMP/hail-browser-consumer"
+          npm install --ignore-scripts "$RUNNER_TEMP/everydaydevopsio-hail-0.1.0.tgz" @playwright/test@1.63.0
+          npm pkg set type=module
+          cp "$GITHUB_WORKSPACE/tests/consumer/workflows.spec.ts" ./workflows.spec.ts
+          cp "$GITHUB_WORKSPACE/tests/consumer/playwright.config.ts" ./playwright.config.ts
+          cp "$GITHUB_WORKSPACE/tests/helpers/demo-app.ts" ./demo-app.ts
+          npx playwright test -c playwright.config.ts
   terraform:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        directory: [terraform/modules/receiver, terraform/examples/cloudflare, terraform/examples/route53, terraform/examples/manual]
+        directory:
+          [
+            terraform/modules/receiver,
+            terraform/examples/cloudflare,
+            terraform/examples/route53,
+            terraform/examples/manual,
+          ]
     steps:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
       - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: '1.9.8'
+          terraform_version: "1.9.8"
       - run: terraform fmt -check -recursive terraform
       - run: terraform -chdir=${{ matrix.directory }} init -backend=false -lockfile=readonly
       - run: terraform -chdir=${{ matrix.directory }} validate
-      - if: matrix.directory == 'terraform/modules/receiver'
-        run: terraform -chdir=${{ matrix.directory }} test
+      - run: terraform -chdir=${{ matrix.directory }} test
