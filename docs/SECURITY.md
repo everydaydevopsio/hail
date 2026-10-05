@@ -14,7 +14,7 @@ The receiver accepts arbitrary local parts on its configured test subdomain, but
 
 ## Links and timing
 
-`getLink` parses without fetching; requires a configured allowed origin; rejects credential-bearing URLs and executable schemes; and fails on ambiguity. It does not validate the destination of HTTP redirects. Do not include arbitrary tracking domains in the allowlist. The caller follows the approved link once in the appropriate browser context.
+`getLink` parses without fetching; requires a configured allowed origin; rejects credential-bearing URLs and executable schemes; and fails on ambiguity. It does not validate the destination of HTTP redirects. Do not include arbitrary tracking domains in the allowlist. The caller follows the approved link once in the appropriate browser context. Use `visitAuthLink(page, url)` from the Playwright entry point to redact token-bearing URLs from navigation errors.
 
 Checkpoint filtering uses the process clock and SES receipt timestamps in indexed-v1 mode. Keep runner clocks synchronized. Delayed indexing of older mail is excluded by receipt time. S3 overwrite times in legacy mode are less precise; use unique addresses for each attempt. No global read/unread flag is shared between test workers.
 
@@ -33,5 +33,9 @@ Default mail retention is three days, Lambda logs seven days, ingestion queue th
 ## Permissions and diagnostics
 
 Provisioning requires broader AWS and optional DNS permissions than running tests. The module exports a reader policy and optionally creates a role only for explicit trusted principal ARNs. No wildcard trusted reader principal is created by default. S3 key validation in the client is defense in depth, not a replacement for IAM policies.
+
+For restricted provisioning, set both `external_indexer_role_arn` and `external_reader_role_arn`. In this mode the receiver module creates no IAM roles, policies, or attachments; its Lambda uses the supplied execution role and `hail_config.roleArn` names the supplied reader role. Precreate and review those roles separately before applying. Setting only one ARN or mixing external roles with `reader_principal_arns` is refused. Existing consumers can retain module-managed roles; set `permissions_boundary_arn` to apply a boundary to any roles the module creates. A boundary is only one control: review trust, identity policies, and resource policies as well.
+
+The live browser fixture requires distinct reader and sender roles with short-lived, owner-only session files and independently verifies both identities with STS using the same credentials passed to its S3 and SES SDK clients. It strips `roleArn` from the direct-reader Hail configuration to avoid a second assumption. It has a shared 200-attempt send counter across workers and concurrent runs that use the same private run directory. SES SDK retries are disabled so one counted attempt is one API attempt. The parent Codex session can still access the source profile; a child process sandbox does not restrict its parent. For stronger agent isolation, start a fresh Codex session in an environment containing only the approved restricted role sessions, with no source `~/.aws`, SSO cache, credential helper, Docker socket, or host credential mount. Setting `AWS_PROFILE` alone does not provide that isolation.
 
 The initial doctor is read-only and reports what it actually checked: DNS MX, SES identity, active matching receipt rule, and recipient-prefix listing. It cannot establish ingestion health, complete rule ordering safety, GetObject access, external sender acceptance, or actual receipt from those checks alone. Inspect the DLQ using an operations identity and run the opt-in live gate.

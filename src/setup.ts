@@ -82,6 +82,10 @@ export async function scaffold(input: InitOptions): Promise<string> {
     manage_rule_set_activation: options.activateNewRuleSet ?? false,
     retention_days: 3,
     reader_principal_arns: [],
+    external_indexer_role_arn: null,
+    external_reader_role_arn: null,
+    permissions_boundary_arn: null,
+    tags: {},
   };
   await writeFile(
     join(destination, "terraform.tfvars.json"),
@@ -95,7 +99,7 @@ export async function scaffold(input: InitOptions): Promise<string> {
   );
   await writeFile(
     join(destination, "example.spec.ts"),
-    `import { test, expect } from '@everydaydevopsio/hail/playwright';\n\ntest('magic-link login', async ({ page, inbox }) => {\n  test.setTimeout(90_000);\n  await page.goto('/login');\n  const after = await inbox.checkpoint();\n  await page.getByLabel('Email').fill(inbox.address);\n  await page.getByRole('button', { name: /send magic link/i }).click();\n  const email = await inbox.waitForEmail({ after, subject: /sign in/i });\n  const origin = new URL(page.url()).origin;\n  await page.goto(email.getLink({ text: /sign in/i, allowedOrigins: [origin] }));\n  await expect(page.getByTestId('current-user-email')).toHaveText(inbox.address);\n});\n`,
+    `import { test, expect, visitAuthLink } from '@everydaydevopsio/hail/playwright';\n\ntest('magic-link login', async ({ page, inbox }) => {\n  test.setTimeout(90_000);\n  await page.goto('/login');\n  const after = await inbox.checkpoint();\n  await page.getByLabel('Email').fill(inbox.address);\n  await page.getByRole('button', { name: /send magic link/i }).click();\n  const email = await inbox.waitForEmail({ after, subject: /sign in/i });\n  const origin = new URL(page.url()).origin;\n  await visitAuthLink(page, email.getLink({ text: /sign in/i, allowedOrigins: [origin] }));\n  await expect(page.getByTestId('current-user-email')).toHaveText(inbox.address);\n});\n`,
     { flag: "wx" },
   );
   return destination;

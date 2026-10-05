@@ -11,11 +11,13 @@ data "aws_partition" "current" {}
 data "aws_region" "current" {}
 
 locals {
-  bucket_name   = coalesce(var.bucket_name, "${var.name}-${data.aws_caller_identity.current.account_id}-${substr(sha256(var.domain), 0, 10)}")
-  rule_set_name = var.existing_rule_set_name != null ? var.existing_rule_set_name : "${var.name}-rules"
-  rule_name     = "${var.name}-receive"
-  rule_arn      = "arn:${data.aws_partition.current.partition}:ses:${var.region}:${data.aws_caller_identity.current.account_id}:receipt-rule-set/${local.rule_set_name}:receipt-rule/${local.rule_name}"
-  tags          = merge(var.tags, { ManagedBy = "hail" })
+  bucket_name      = coalesce(var.bucket_name, "${var.name}-${data.aws_caller_identity.current.account_id}-${substr(sha256(var.domain), 0, 10)}")
+  rule_set_name    = var.existing_rule_set_name != null ? var.existing_rule_set_name : "${var.name}-rules"
+  rule_name        = "${var.name}-receive"
+  rule_arn         = "arn:${data.aws_partition.current.partition}:ses:${var.region}:${data.aws_caller_identity.current.account_id}:receipt-rule-set/${local.rule_set_name}:receipt-rule/${local.rule_name}"
+  tags             = merge(var.tags, { ManagedBy = "hail" })
+  external_iam     = var.external_indexer_role_arn != null && var.external_reader_role_arn != null
+  indexer_role_arn = local.external_iam ? var.external_indexer_role_arn : aws_iam_role.indexer[0].arn
 }
 
 resource "aws_s3_bucket" "emails" {
@@ -108,14 +110,17 @@ resource "aws_cloudwatch_log_group" "indexer" {
   tags              = local.tags
 }
 resource "aws_iam_role" "indexer" {
-  name = "${var.name}-indexer"
+  count                = local.external_iam ? 0 : 1
+  name                 = "${var.name}-indexer"
+  permissions_boundary = var.permissions_boundary_arn
   assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{
     Effect = "Allow", Principal = { Service = "lambda.amazonaws.com" }, Action = "sts:AssumeRole"
   }] })
   tags = local.tags
 }
 resource "aws_iam_role_policy" "indexer" {
-  role = aws_iam_role.indexer.id
+  count = local.external_iam ? 0 : 1
+  role  = aws_iam_role.indexer[0].id
   policy = jsonencode({ Version = "2012-10-17", Statement = [
     { Effect = "Allow", Action = ["s3:GetObject"], Resource = "${aws_s3_bucket.emails.arn}/incoming/*" },
     { Effect = "Allow", Action = ["s3:PutObject"], Resource = "${aws_s3_bucket.emails.arn}/index/*" },
@@ -130,7 +135,7 @@ data "archive_file" "indexer" {
 }
 resource "aws_lambda_function" "indexer" {
   function_name    = "${var.name}-indexer"
-  role             = aws_iam_role.indexer.arn
+  role             = local.indexer_role_arn
   runtime          = "python3.12"
   handler          = "handler.handler"
   filename         = data.archive_file.indexer.output_path
@@ -161,6 +166,14 @@ resource "aws_ses_domain_identity" "receiver" {
       condition     = !(var.manage_rule_set_activation && var.existing_rule_set_name != null)
       error_message = "Do not manage activation of an existing/shared receipt rule set."
     }
+    precondition {
+      condition     = (var.external_indexer_role_arn == null) == (var.external_reader_role_arn == null)
+      error_message = "Provide both external roles or neither; partial external IAM is unsafe."
+    }
+    precondition {
+      condition     = !local.external_iam || length(var.reader_principal_arns) == 0
+      error_message = "External IAM mode does not create reader trust; reader_principal_arns must be empty."
+    }
   }
 }
 resource "aws_ses_receipt_rule_set" "receiver" {
@@ -188,7 +201,8 @@ resource "aws_ses_active_receipt_rule_set" "receiver" {
   depends_on    = [aws_ses_receipt_rule.receiver]
 }
 resource "aws_iam_policy" "reader" {
-  name = "${var.name}-reader"
+  count = local.external_iam ? 0 : 1
+  name  = "${var.name}-reader"
   policy = jsonencode({ Version = "2012-10-17", Statement = [
     { Effect = "Allow", Action = ["s3:ListBucket"], Resource = aws_s3_bucket.emails.arn, Condition = { StringLike = { "s3:prefix" = ["index/*"] } } },
     { Effect = "Allow", Action = ["s3:GetObject"], Resource = ["${aws_s3_bucket.emails.arn}/index/*", "${aws_s3_bucket.emails.arn}/incoming/*"] },
@@ -197,15 +211,16 @@ resource "aws_iam_policy" "reader" {
   tags = local.tags
 }
 resource "aws_iam_role" "reader" {
-  count = length(var.reader_principal_arns) > 0 ? 1 : 0
-  name  = "${var.name}-reader"
+  count                = !local.external_iam && length(var.reader_principal_arns) > 0 ? 1 : 0
+  name                 = "${var.name}-reader"
+  permissions_boundary = var.permissions_boundary_arn
   assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{
     Effect = "Allow", Principal = { AWS = var.reader_principal_arns }, Action = "sts:AssumeRole"
   }] })
   tags = local.tags
 }
 resource "aws_iam_role_policy_attachment" "reader" {
-  count      = length(var.reader_principal_arns) > 0 ? 1 : 0
+  count      = !local.external_iam && length(var.reader_principal_arns) > 0 ? 1 : 0
   role       = aws_iam_role.reader[0].name
-  policy_arn = aws_iam_policy.reader.arn
+  policy_arn = aws_iam_policy.reader[0].arn
 }

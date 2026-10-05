@@ -5,7 +5,7 @@ Local CI is necessary but insufficient. A release is not verified for email deli
 ## Before the run
 
 1. Select a dedicated test subdomain and a supported receiving region. Run `hail init` against an existing authoritative Cloudflare or public Route53 zone, or use manual DNS. Review and apply Terraform yourself. Never overwrite the company domain's MX records.
-2. Grant the test identity the exported reader policy. If `hail_config.roleArn` is set, also grant permission to assume it and configure its trust policy. Keep infrastructure provisioning credentials separate from test credentials.
+2. Use separate restricted reader and synthetic-sender roles. The browser fixture takes explicit short-lived session files for each and checks their AWS account and role with the same SDK credentials it uses for S3 and SES. The reader session uses direct S3 access; test the optional `roleArn` assumption separately from an authorized restricted source.
 3. Configure a verified SES sender and scoped `ses:SendRawEmail` access for the live demonstration suite. Receiving does not require Hail to become the application's sending provider. In a sandboxed SES sending account/region, verify the test recipient domain there too or obtain appropriate production sending access.
 4. Run `hail configure --terraform-dir infra/hail`, then `hail doctor`. Check the ingestion queue/DLQ separately. Existing active receipt rules that run first must not stop, bounce, or redirect these messages.
 
@@ -17,21 +17,29 @@ npm run build
 npx playwright install --with-deps chromium
 export HAIL_CONFIG=/absolute/path/to/hail.config.json
 export HAIL_FROM=verified-test-sender@example.com
-# Optional when the sender is in a different SES region:
 export HAIL_SEND_REGION=us-east-1
+export HAIL_EXPECTED_ACCOUNT=123456789012
+export HAIL_READER_ROLE_ARN=arn:aws:iam::123456789012:role/hail-run-reader
+export HAIL_SENDER_ROLE_ARN=arn:aws:iam::123456789012:role/hail-run-sender
+export HAIL_READER_SESSION_FILE=/private/hail-run/reader.json
+export HAIL_SENDER_SESSION_FILE=/private/hail-run/sender.json
+export HAIL_LIVE_RUN_DIR=/private/hail-run
 npm run test:live
 ```
+
+Each session file is mode 0600 and contains `accessKeyId`, `secretAccessKey`, `sessionToken`, and ISO 8601 `expiration` from an approved restricted STS assumption. The private run directory is mode 0700 and is shared by all workers and repeat runs to enforce the 200-send limit. Do not put the powerful bootstrap profile in the browser process, its environment, its home directory, or any mounted credential helper. Keep the run directory private and delete session files after the phase.
 
 This sends synthetic messages to randomly generated addresses in the configured test domain. The localhost link inside the email is followed by the same runner's browser; no public demo app deployment is required.
 
 The checked-in live workflow is manual-only. Configure a protected GitHub environment named `hail-live`, with required reviewers and allowed deployment branches. It expects:
 
-- Repository/environment variable `HAIL_AWS_ROLE_ARN`: tightly scoped OIDC role. Use the actual GitHub OIDC subject for this repository and environment in AWS trust conditions; do not trust arbitrary repositories, refs, or fork code.
+- Environment variables `HAIL_READER_ROLE_ARN` and `HAIL_SENDER_ROLE_ARN`: separate, tightly scoped OIDC roles. Use the actual GitHub OIDC subject for this repository and protected environment in AWS trust conditions; do not trust arbitrary repositories, refs, or fork code.
+- Environment variable `HAIL_EXPECTED_ACCOUNT`: the approved 12-digit AWS account ID checked by the live fixture for both roles.
 - Variable `AWS_REGION` for the test identity and receiving configuration.
 - Variable `HAIL_FROM` for the verified synthetic sender, and optional `HAIL_SEND_REGION`.
-- Environment secret `HAIL_CONFIG_JSON`: the Terraform `hail_config` object as JSON, not the entire Terraform state.
+- Environment secret `HAIL_CONFIG_JSON`: the Terraform `hail_config` object as JSON, not the entire Terraform state. The workflow removes its `roleArn` for direct reader-session testing and writes a private temporary file.
 
-Run the workflow only after reviewing and merging the integration PR. It uses no Terraform apply and publishes no package. Never grant live credentials to untrusted pull requests. In a public repository, review your Actions log visibility before using reusable accounts; the workflow deliberately avoids automatic reports or authentication traces but cannot guarantee that all dependencies redact errors.
+Run the workflow only with restricted reader and sender identities in the protected environment. It uses no Terraform apply and publishes no package. Never grant live credentials to untrusted pull requests. In a public repository, review Actions log visibility before using reusable accounts; the workflow avoids automatic reports and authentication traces but cannot guarantee that all dependencies redact errors.
 
 ## Evidence required before release
 

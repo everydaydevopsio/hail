@@ -75,3 +75,34 @@ run "reject_invalid_retention" {
   variables { retention_days = 0 }
   expect_failures = [var.retention_days]
 }
+run "external_roles_create_no_iam" {
+  command = plan
+  variables {
+    external_indexer_role_arn = "arn:aws:iam::123456789012:role/hail-test-indexer"
+    external_reader_role_arn  = "arn:aws:iam::123456789012:role/hail-test-reader"
+  }
+  assert {
+    condition     = length(aws_iam_role.indexer) == 0 && length(aws_iam_role_policy.indexer) == 0 && length(aws_iam_policy.reader) == 0 && length(aws_iam_role.reader) == 0 && length(aws_iam_role_policy_attachment.reader) == 0
+    error_message = "External-role provisioning must not create any IAM resources."
+  }
+  assert {
+    condition     = aws_lambda_function.indexer.role == var.external_indexer_role_arn && output.hail_config.roleArn == var.external_reader_role_arn
+    error_message = "External role ARNs must reach Lambda and the Hail config."
+  }
+}
+run "reject_partial_external_roles" {
+  command = plan
+  variables { external_reader_role_arn = "arn:aws:iam::123456789012:role/hail-test-reader" }
+  expect_failures = [aws_ses_domain_identity.receiver]
+}
+run "module_roles_use_boundary" {
+  command = plan
+  variables {
+    reader_principal_arns    = ["arn:aws:iam::123456789012:role/approved-source"]
+    permissions_boundary_arn = "arn:aws:iam::123456789012:policy/hail-test-boundary"
+  }
+  assert {
+    condition     = aws_iam_role.indexer[0].permissions_boundary == var.permissions_boundary_arn && aws_iam_role.reader[0].permissions_boundary == var.permissions_boundary_arn
+    error_message = "Module-created roles must receive the configured permissions boundary."
+  }
+}

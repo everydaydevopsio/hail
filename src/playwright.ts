@@ -1,4 +1,9 @@
-import { test as base, expect } from "@playwright/test";
+import {
+  test as base,
+  expect,
+  type Page,
+  type Response,
+} from "@playwright/test";
 import { Hail, loadConfig, type HailConfig, type Inbox } from "./index.js";
 
 export interface HailOptions {
@@ -22,3 +27,15 @@ export const test = base.extend<HailOptions & HailFixtures>({
   },
 });
 export { expect };
+
+/** Prevent Playwright navigation errors from printing token-bearing URLs. */
+export async function visitAuthLink(
+  page: Page,
+  url: string,
+): Promise<Response | null> {
+  try {
+    return await page.goto(url);
+  } catch {
+    throw new Error("Authentication link navigation failed. URL is redacted.");
+  }
+}

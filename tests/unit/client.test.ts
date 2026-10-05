@@ -153,6 +153,18 @@ test("authentication/storage failures fail immediately", async () => {
   const inbox = new Hail(config, store).createInbox();
   await assert.rejects(inbox.waitForEmail({ timeoutMs: 500 }), /AccessDenied/);
 });
+test("a storage failure after the deadline is never treated as absent mail", async () => {
+  const store = new MemoryStore();
+  store.list = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    throw new Error("AccessDenied");
+  };
+  const inbox = new Hail(config, store).createInbox();
+  await assert.rejects(
+    inbox.expectNoEmail({ forMs: 10, pollIntervalMs: 2 }),
+    /AccessDenied/,
+  );
+});
 test("invalid timeout and poll interval fail before polling", async () => {
   const { inbox } = setup();
   await assert.rejects(inbox.waitForEmail({ timeoutMs: -1 }), /positive/);

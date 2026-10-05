@@ -50,11 +50,25 @@ for (const dns of ["manual", "cloudflare", "route53"] as const) {
       if (dns !== "cloudflare")
         assert.ok(!main.includes('provider "cloudflare"'));
       await access(join(out, "modules/receiver/lambda/handler.py"));
-      assert.equal(
-        JSON.parse(await readFile(join(out, "terraform.tfvars.json"), "utf8"))
-          .domain,
-        base.domain,
+      assert.match(
+        await readFile(join(out, "example.spec.ts"), "utf8"),
+        /visitAuthLink/,
       );
+      const variables = JSON.parse(
+        await readFile(join(out, "terraform.tfvars.json"), "utf8"),
+      );
+      assert.equal(variables.domain, base.domain);
+      assert.equal(variables.external_indexer_role_arn, null);
+      assert.equal(variables.external_reader_role_arn, null);
+      assert.equal(variables.permissions_boundary_arn, null);
+      assert.deepEqual(variables.tags, {});
+      for (const input of [
+        "external_indexer_role_arn",
+        "external_reader_role_arn",
+        "permissions_boundary_arn",
+        "tags",
+      ])
+        assert.ok(main.includes(input));
       await assert.rejects(scaffold({ ...base, out }), { code: "EEXIST" });
     } finally {
       await rm(parent, { recursive: true, force: true });
