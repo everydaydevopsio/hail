@@ -40,7 +40,10 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
-data "aws_route53_zone" "selected" { zone_id = var.zone_id }
+data "aws_route53_zone" "selected" {
+  zone_id      = var.zone_id
+  private_zone = false
+}
 resource "terraform_data" "guard" {
   input = var.domain
   lifecycle {

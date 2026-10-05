@@ -246,17 +246,20 @@ test("parallel workers never receive another test inbox message", async ({
   );
 });
 
-test("failed auth navigation redacts the token", async ({ page }) => {
+test("failed auth navigation redacts the token", async ({ page, app }) => {
   const token = "SYNTHETIC_SECRET_TOKEN";
+  let intercepted = false;
+  await page.route("**/auth/callback?**", (route) => {
+    intercepted = true;
+    return route.abort();
+  });
   let failure: unknown;
   try {
-    await visitAuthLink(
-      page,
-      `http://127.0.0.1:1/auth/callback?token=${token}`,
-    );
+    await visitAuthLink(page, `${app.origin}/auth/callback?token=${token}`);
   } catch (error) {
     failure = error;
   }
+  expect(intercepted).toBe(true);
   expect(failure).toBeInstanceOf(Error);
   expect(String(failure)).toContain("URL is redacted");
   expect(String(failure)).not.toContain(token);

@@ -4,7 +4,7 @@ This is a sanitized record for the testing/hardening branch stacked on PR #1. It
 
 - Upstream main base: `a74e9d79123024f276e1cb6d5b38316fe54bc4db`.
 - PR #1 tested base: `0ad6d738727136dcd1c2e58fe0a3b217a6977c1b` (open on 2026-10-05).
-- Candidate tarball: `everydaydevopsio-hail-0.1.0.tgz`, SHA-256 `b00c7c6597dc1a8a403393bfa5418032daa3a4756808f1262569de09dd00534a`.
+- Candidate tarball: `everydaydevopsio-hail-0.1.0.tgz`, SHA-256 `162d11328f9decccc0085382a23d55667be4353639952430f08c34946348af8a`.
 - Read-only source discovery: `biokeytic` resolves to account `520473892387`, IAM user `arn:aws:iam::520473892387:user/marka`. These observed facts do not approve a deployment.
 - Local test processes used an empty environment and a mount namespace hiding source `~/.aws`, `~/.config`, and `~/.ssh`. The parent agent still had access to the powerful profile.
 
