@@ -19,10 +19,10 @@ jobs:
       HAIL_SENDER_ROLE_ARN: ${{ vars.HAIL_SENDER_ROLE_ARN }}
       HAIL_FROM: ${{ vars.HAIL_FROM }}
       HAIL_SEND_REGION: ${{ vars.HAIL_SEND_REGION || vars.AWS_REGION }}
-      HAIL_CONFIG: ${{ runner.temp }}/hail-live/hail.config.json
-      HAIL_READER_SESSION_FILE: ${{ runner.temp }}/hail-live/reader.json
-      HAIL_SENDER_SESSION_FILE: ${{ runner.temp }}/hail-live/sender.json
-      HAIL_LIVE_RUN_DIR: ${{ runner.temp }}/hail-live
+      HAIL_CONFIG: /tmp/hail-live-${{ github.run_id }}/hail.config.json
+      HAIL_READER_SESSION_FILE: /tmp/hail-live-${{ github.run_id }}/reader.json
+      HAIL_SENDER_SESSION_FILE: /tmp/hail-live-${{ github.run_id }}/sender.json
+      HAIL_LIVE_RUN_DIR: /tmp/hail-live-${{ github.run_id }}
     steps:
       - uses: actions/checkout@v5
         with:
