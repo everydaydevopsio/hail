@@ -9,3 +9,6 @@ Record repeatable failure patterns and the test or gate that catches them here.
 - Browser and Node subprocess tests inside a mount namespace need `/proc` and `/dev`; the command sandbox can still prohibit child process or browser operations, so a passing exit with incomplete output is not evidence. Require final test counts.
 - A failed-navigation test targeting an unreachable port can hang until the browser's navigation timeout, especially in WebKit. Intercept and abort a synthetic token URL on the loopback app, then assert the sanitized error.
 - Terraform's mock data defaults did not populate an optional Route53 `private_zone` input; the test uncovered a null guard value. Filter the data source to public zones explicitly so both the mock plan and real lookup fail closed.
+- Separate identity checks do not prove role separation unless the configured ARNs are compared. Validate reader and sender roles before either live session is used.
+- `Date.parse` can return `NaN`, and a comparison against `NaN` is false. Require a finite timestamp before admitting a short-lived session.
+- A centrally counted `ses.send` call can still make multiple API attempts through SDK retries. Keep SES `maxAttempts` at one and count every application attempt before calling it.

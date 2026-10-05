@@ -7,7 +7,11 @@ import {
 } from "../../src/playwright.js";
 import { Hail, loadConfig } from "../../src/index.js";
 import { S3MailStore } from "../../src/store.js";
-import { countLiveSend, loadRestrictedSession } from "../helpers/live-aws.js";
+import {
+  assertDistinctLiveRoles,
+  countLiveSend,
+  loadRestrictedSession,
+} from "../helpers/live-aws.js";
 import { MemoryStore, config } from "../helpers/memory-store.js";
 import {
   startDemoApp,
@@ -19,6 +23,10 @@ const live = process.env.HAIL_LIVE === "1";
 const test = hailTest.extend<{ app: DemoApp }>({
   hail: async ({}, use) => {
     if (live) {
+      assertDistinctLiveRoles(
+        process.env.HAIL_READER_ROLE_ARN,
+        process.env.HAIL_SENDER_ROLE_ARN,
+      );
       if (!process.env.HAIL_FROM)
         throw new Error(
           "Live tests require an explicitly configured HAIL_FROM sender and HAIL_CONFIG receiver.",
@@ -59,7 +67,8 @@ const test = hailTest.extend<{ app: DemoApp }>({
       const ses = new SESClient({
         region: sendRegion,
         credentials: sender.credentials,
-        maxAttempts: 2,
+        // Count each API attempt centrally; SDK-level retries would bypass the send budget.
+        maxAttempts: 1,
       });
       send = async (recipient, raw) => {
         await countLiveSend(process.env.HAIL_LIVE_RUN_DIR);

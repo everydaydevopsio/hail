@@ -10,6 +10,21 @@ type Session = {
   account: string;
 };
 
+export function assertDistinctLiveRoles(
+  readerArn: string | undefined,
+  senderArn: string | undefined,
+): void {
+  if (!readerArn || !senderArn || readerArn === senderArn)
+    throw new Error("Live reader and sender roles must be distinct.");
+}
+
+export function validSessionExpiration(value: unknown): Date {
+  const timestamp = typeof value === "string" ? Date.parse(value) : NaN;
+  if (!Number.isFinite(timestamp) || timestamp < Date.now() + 15 * 60_000)
+    throw new Error("Restricted session is missing or expires too soon.");
+  return new Date(timestamp);
+}
+
 export async function loadRestrictedSession(
   file: string | undefined,
   expectedRoleArn: string | undefined,
@@ -36,16 +51,15 @@ export async function loadRestrictedSession(
   if (
     typeof data.accessKeyId !== "string" ||
     typeof data.secretAccessKey !== "string" ||
-    typeof data.sessionToken !== "string" ||
-    typeof data.expiration !== "string" ||
-    Date.parse(data.expiration) < Date.now() + 15 * 60_000
+    typeof data.sessionToken !== "string"
   )
     throw new Error("Restricted session is missing or expires too soon.");
+  const expiration = validSessionExpiration(data.expiration);
   const credentials: AwsCredentialIdentity = {
     accessKeyId: data.accessKeyId,
     secretAccessKey: data.secretAccessKey,
     sessionToken: data.sessionToken,
-    expiration: new Date(data.expiration),
+    expiration,
   };
   const sts = new STSClient({ region, credentials, maxAttempts: 1 });
   const identity = await sts.send(new GetCallerIdentityCommand({}), {

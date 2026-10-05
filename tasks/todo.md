@@ -6,9 +6,10 @@
 - [x] Add reproducing tests, fix the deadline and package defects, and rerun affected suites.
 - [x] Build and inspect a clean packed consumer outside the repository, including two local browser workflows.
 - [ ] Confirm authorized AWS account, region, zone, subdomain, DNS mode, sender, SES rule-set policy, and retention.
-- [ ] Implement and review restricted bootstrap IAM, external-role module mode, role isolation, and cleanup.
+- [x] Implement external-role and permissions-boundary receiver mode; mock plan passed in CI.
+- [ ] Implement and review restricted bootstrap IAM, role isolation, and cleanup after the approved live scope is supplied.
 - [ ] Provision only approved disposable resources; run real mail/browser, fault, permission, drift, and teardown checks.
-- [ ] Record exact commit, package, roles, evidence, blockers, and cleanup state; push a stacked PR and review CI.
+- [ ] Record final commit, package, roles, evidence, blockers, and cleanup state; PR #2 is open with Copilot review, and CI must rerun after credential fixes.
 
 ## Decisions and risk
 
