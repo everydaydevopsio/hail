@@ -1,0 +1,13 @@
+upstream/
+tests/
+.github/
+node_modules/
+**/.terraform/**
+**/*.tfstate*
+**/*.tfvars
+**/*.tfvars.json
+**/lambda.zip
+**/__pycache__/**
+**/*.pyc
+hail.config.json
+.env*
