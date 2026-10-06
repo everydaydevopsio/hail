@@ -32,6 +32,8 @@ Default mail retention is three days, Lambda logs seven days, ingestion queue th
 
 ## Permissions and diagnostics
 
+For an isolated live run, use the declarative four-role bootstrap and container execution in [IAM-BOOTSTRAP.md](IAM-BOOTSTRAP.md). The source profile is limited to IAM bootstrap and short-lived STS assumption; ordinary Terraform and tests use the restricted sessions. Review resource policies as well as permissions boundaries.
+
 Provisioning requires broader AWS and optional DNS permissions than running tests. The module exports a reader policy and optionally creates a role only for explicit trusted principal ARNs. No wildcard trusted reader principal is created by default. S3 key validation in the client is defense in depth, not a replacement for IAM policies.
 
 For restricted provisioning, set both `external_indexer_role_arn` and `external_reader_role_arn`. In this mode the receiver module creates no IAM roles, policies, or attachments; its Lambda uses the supplied execution role and `hail_config.roleArn` names the supplied reader role. Precreate and review those roles separately before applying. Setting only one ARN or mixing external roles with `reader_principal_arns` is refused. Existing consumers can retain module-managed roles; set `permissions_boundary_arn` to apply a boundary to any roles the module creates. A boundary is only one control: review trust, identity policies, and resource policies as well.

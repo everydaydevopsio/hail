@@ -1,0 +1,42 @@
+# Isolated live-run IAM bootstrap
+
+This Terraform root is separate from the receiver state. It creates four run-owned roles and four matching managed policies. Every role uses its policy as both its identity policy and permissions boundary. The bootstrap profile may create or destroy only this bootstrap state, obtain short-lived role sessions, and make recorded policy corrections. Receiver provisioning, Hail, and browser tests use restricted sessions.
+
+The inputs must name an explicitly approved AWS account, receiving region, dedicated test domain, synthetic sender, source IAM principal and current source session ARN. Resolve an SSO source role with IAM rather than editing an STS ARN: IAM role paths can differ. `terraform_data.identity_guard` fails a plan when account, source session, or region differs. Inspect the complete saved plan before applying it. State and plans contain sensitive metadata and belong in a private directory, never Git.
+
+## Policy scope
+
+| Role | Trust | Permissions |
+| --- | --- | --- |
+| Provisioner | Exact approved source IAM principal | Exact run bucket and objects, SNS topic, SQS queues, Lambda function and log group; PassRole of only the run indexer to Lambda; assume only the run reader; regional SES receipt operations; run function event-source mapping. No IAM policy, role, or boundary administration. |
+| Reader | Exact source IAM principal and exact run provisioner role | List only `index/*` in the run bucket; read `index/*` and `incoming/*`; read-only regional SES verification and active-rule diagnostics. |
+| Sender | Exact source IAM principal | `ses:SendRawEmail` through only the approved SES domain identity, with exact From address, nonempty envelope recipients all matching the approved domain, and exact requested region. |
+| Indexer | Lambda service | Read run raw objects, write run index objects, consume the run ingestion queue, and write its own log streams. |
+
+The policy uses `Resource: "*"` only for API operations without usable resource scoping: SES receipt-rule-set creation/activation and diagnostics, Lambda event-source mapping creation/list, and CloudWatch Logs group listing. `lambda:FunctionArn` restricts mapping creation and the mapping management ARN and function condition restrict updates/deletes. Each wildcard statement also has `aws:RequestedRegion`; the account must be expressly approved for regional SES receiving changes. SNS unsubscribe is scoped to the exact topic ARN. The [AWS service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/) and [S3 API permission mapping](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-policy-actions.html) govern action names; IAM Access Analyzer validates all four rendered policies before apply. S3 `DeletePublicAccessBlock` and `DeleteBucketLifecycle` use their respective `Put` permissions.
+
+The boundary limits identity permissions, but does not replace review of S3, SNS and SQS resource policies. The receiver's resource policies must grant only SES/SNS service principals with the exact source account and run resource ARN. Use policy simulation and safe live canaries to check denials. An `AccessDenied` response is required; `NotFound` is not denial evidence.
+
+## Repeatable execution
+
+Set `RUN_DIR` and `SESSION_DIR` to separate private mode-0700 directories. Write an approved `bootstrap.auto.tfvars.json` under `RUN_DIR`. The run name must be unique. Keep Terraform state and saved plans in `RUN_DIR` and restricted sessions in `SESSION_DIR`. The following commands show the phase boundaries; replace the example identifiers with the approved manifest values.
+
+```bash
+terraform -chdir=terraform/bootstrap init -backend=false -lockfile=readonly
+terraform -chdir=terraform/bootstrap test
+AWS_PROFILE=biokeytic terraform -chdir=terraform/bootstrap plan -var-file="$RUN_DIR/bootstrap.auto.tfvars.json" -state="$RUN_DIR/bootstrap.tfstate" -out="$RUN_DIR/bootstrap.tfplan"
+# Review terraform show -no-color "$RUN_DIR/bootstrap.tfplan" and Access Analyzer findings first.
+AWS_PROFILE=biokeytic terraform -chdir=terraform/bootstrap apply -state="$RUN_DIR/bootstrap.tfstate" "$RUN_DIR/bootstrap.tfplan"
+node scripts/assume-live-role.mjs provisioner "$RUN" "$ACCOUNT" "$SESSION_DIR" "$SOURCE_SESSION_ARN" biokeytic
+node scripts/assume-live-role.mjs reader "$RUN" "$ACCOUNT" "$SESSION_DIR" "$SOURCE_SESSION_ARN" biokeytic
+node scripts/assume-live-role.mjs sender "$RUN" "$ACCOUNT" "$SESSION_DIR" "$SOURCE_SESSION_ARN" biokeytic
+node scripts/run-live-isolated.mjs terraform "$SESSION_DIR/provisioner.json" "$RUN_DIR" terraform -chdir=infra/hail plan -out=/private/receiver.tfplan
+node scripts/run-live-isolated.mjs node "$SESSION_DIR/reader.json" "$RUN_DIR" node dist/cli.js doctor --config /private/hail.config.json
+HAIL_LIVE_SENDER_SESSION_FILE="$SESSION_DIR/sender.json" node scripts/run-live-isolated.mjs browser "$SESSION_DIR/reader.json" "$RUN_DIR" npm run test:live
+```
+
+The isolated runner mounts this checkout and `RUN_DIR` into a Docker container. Keep all credentials and provider token files outside both mounted trees. It supplies only the chosen restricted session, sets credential/config files to `/dev/null`, disables EC2 metadata fallback, and does not mount the host home, AWS/SSO cache, credential helpers, or Docker socket. The browser phase mounts only its separate reader and sender session files and the fixture verifies the Node SDK identity itself. An optional `HAIL_LIVE_EXTRA_ENV_FILE` is for a private, zone-scoped `CLOUDFLARE_API_TOKEN` file in the provisioner phase only; the runner rejects it in reader/browser phases. Avoid shell tracing and never print the files. Refresh expired sessions by issuing new restricted sessions and restarting a phase, not by exposing the source profile inside a test process.
+
+Subprocess isolation does not limit a parent Codex session that can still access the bootstrap profile. For stronger agent-level isolation, start a fresh Codex session inside a container with only this checkout, the private restricted session files, no host home or AWS cache mounts, and no Docker socket. `AWS_PROFILE` alone does not provide that isolation.
+
+Cleanup is ordered: remove only manifest-owned synthetic objects, including versions and delete markers; destroy the receiver with the restricted provisioner after checking account, bucket, tags, and DNS ownership; then destroy this IAM bootstrap state with the source profile. Keep the manifest and state until both destroys and absence checks succeed. Never force-destroy an uninspected bucket or modify another SES rule set.

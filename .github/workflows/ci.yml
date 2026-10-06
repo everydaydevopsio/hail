@@ -108,6 +108,7 @@ jobs:
       matrix:
         directory:
           [
+            terraform/bootstrap,
             terraform/modules/receiver,
             terraform/examples/cloudflare,
             terraform/examples/route53,
