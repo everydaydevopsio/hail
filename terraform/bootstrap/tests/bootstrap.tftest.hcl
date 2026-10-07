@@ -59,6 +59,38 @@ run "passrole_is_exact" {
   }
 }
 
+run "provider_readback_permissions" {
+  command = plan
+  assert {
+    condition     = alltrue([for action in ["s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketWebsite", "s3:GetAccelerateConfiguration", "s3:GetBucketRequestPayment", "s3:GetBucketLogging", "s3:GetReplicationConfiguration", "s3:GetBucketObjectLockConfiguration"] : contains(one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Action if s.Sid == "OwnBucket"]), action)])
+    error_message = "The AWS S3 bucket provider must be able to read back each configuration it inspects on the run bucket."
+  }
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Action if s.Sid == "OwnTopic"]), "sns:GetSubscriptionAttributes") && contains(one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Action if s.Sid == "OwnTopic"]), "sns:SetSubscriptionAttributes")
+    error_message = "The AWS SNS subscription provider must read and set attributes on the run topic."
+  }
+  assert {
+    condition     = one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Resource if s.Sid == "OwnLogGroup"]) == "arn:aws:logs:us-east-1:520473892387:log-group:/aws/lambda/hail-20261005-202402-indexer"
+    error_message = "Log group tag reads require the exact log group ARN without a stream suffix."
+  }
+  assert {
+    condition     = alltrue([for action in ["lambda:ListVersionsByFunction", "lambda:GetFunctionCodeSigningConfig"] : contains(one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Action if s.Sid == "OwnFunction"]), action)])
+    error_message = "The pinned Lambda provider reads function versions and code signing configuration."
+  }
+  assert {
+    condition     = one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Resource if s.Sid == "ReadMappingTags"]) == "arn:aws:lambda:us-east-1:520473892387:event-source-mapping:*"
+    error_message = "Mapping tag readback must stay in the approved account and region."
+  }
+  assert {
+    condition     = one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Resource if s.Sid == "ReadRegionalMapping"]) == "*" && one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Condition.StringEquals["aws:RequestedRegion"] if s.Sid == "ReadRegionalMapping"]) == var.region && !contains(one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Action if s.Sid == "ManageOwnMapping"]), "lambda:GetEventSourceMapping")
+    error_message = "Terraform teardown polling needs a regional read when the deleted mapping no longer has an ARN."
+  }
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Action if s.Sid == "OwnSesRegion"]), "ses:DescribeReceiptRule")
+    error_message = "The SES receipt rule provider must read back its newly created rule."
+  }
+}
+
 run "reject_other_account" {
   command = plan
   variables {

@@ -21,7 +21,8 @@ locals {
   ]
   function_arn    = "arn:${local.partition}:lambda:${var.region}:${var.account_id}:function:${var.name}-indexer"
   mapping_arn     = "arn:${local.partition}:lambda:${var.region}:${var.account_id}:event-source-mapping:*"
-  log_arn         = "arn:${local.partition}:logs:${var.region}:${var.account_id}:log-group:/aws/lambda/${var.name}-indexer:*"
+  log_group_arn   = "arn:${local.partition}:logs:${var.region}:${var.account_id}:log-group:/aws/lambda/${var.name}-indexer"
+  log_stream_arn  = "${local.log_group_arn}:log-stream:*"
   identity_arn    = "arn:${local.partition}:ses:${var.region}:${var.account_id}:identity/${var.domain}"
   provisioner_arn = "arn:${local.partition}:iam::${var.account_id}:role/${var.name}-provisioner"
   policy_arns = {
@@ -63,22 +64,27 @@ locals {
     { Sid = "ReadRaw", Effect = "Allow", Action = ["s3:GetObject"], Resource = "${local.bucket_arn}/incoming/*" },
     { Sid = "WriteIndexes", Effect = "Allow", Action = ["s3:PutObject"], Resource = "${local.bucket_arn}/index/*" },
     { Sid = "ConsumeIngestion", Effect = "Allow", Action = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], Resource = local.queue_arns[0] },
-    { Sid = "WriteOwnLogs", Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = local.log_arn },
+    { Sid = "WriteOwnLogs", Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents"], Resource = local.log_stream_arn },
   ] })
   provisioner_policy = jsonencode({ Version = "2012-10-17", Statement = [
     { Sid = "PassIndexerOnly", Effect = "Allow", Action = ["iam:PassRole"], Resource = "arn:${local.partition}:iam::${var.account_id}:role/${var.name}-indexer", Condition = { StringEquals = { "iam:PassedToService" = "lambda.amazonaws.com" } } },
     { Sid = "AssumeReaderOnly", Effect = "Allow", Action = ["sts:AssumeRole"], Resource = "arn:${local.partition}:iam::${var.account_id}:role/${var.name}-reader" },
-    { Sid = "OwnBucket", Effect = "Allow", Action = ["s3:CreateBucket", "s3:DeleteBucket", "s3:ListBucket", "s3:ListBucketVersions", "s3:GetBucketLocation", "s3:GetBucketPolicy", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:PutBucketPublicAccessBlock", "s3:GetEncryptionConfiguration", "s3:PutEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:PutLifecycleConfiguration", "s3:GetBucketTagging", "s3:PutBucketTagging", "s3:GetBucketVersioning"], Resource = local.bucket_arn },
+    { Sid = "OwnBucket", Effect = "Allow", Action = ["s3:CreateBucket", "s3:DeleteBucket", "s3:ListBucket", "s3:ListBucketVersions", "s3:GetBucketLocation", "s3:GetBucketAcl", "s3:GetBucketCORS", "s3:GetBucketWebsite", "s3:GetAccelerateConfiguration", "s3:GetBucketRequestPayment", "s3:GetBucketLogging", "s3:GetReplicationConfiguration", "s3:GetBucketObjectLockConfiguration", "s3:GetBucketPolicy", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy", "s3:GetBucketPublicAccessBlock", "s3:PutBucketPublicAccessBlock", "s3:GetEncryptionConfiguration", "s3:PutEncryptionConfiguration", "s3:GetLifecycleConfiguration", "s3:PutLifecycleConfiguration", "s3:GetBucketTagging", "s3:PutBucketTagging", "s3:GetBucketVersioning"], Resource = local.bucket_arn },
     { Sid = "OwnObjects", Effect = "Allow", Action = ["s3:GetObject", "s3:DeleteObject", "s3:DeleteObjectVersion"], Resource = "${local.bucket_arn}/*" },
-    { Sid = "OwnTopic", Effect = "Allow", Action = ["sns:CreateTopic", "sns:DeleteTopic", "sns:GetTopicAttributes", "sns:SetTopicAttributes", "sns:TagResource", "sns:UntagResource", "sns:ListTagsForResource", "sns:Subscribe", "sns:ListSubscriptionsByTopic"], Resource = local.topic_arn },
+    { Sid = "OwnTopic", Effect = "Allow", Action = ["sns:CreateTopic", "sns:DeleteTopic", "sns:GetTopicAttributes", "sns:SetTopicAttributes", "sns:GetSubscriptionAttributes", "sns:SetSubscriptionAttributes", "sns:TagResource", "sns:UntagResource", "sns:ListTagsForResource", "sns:Subscribe", "sns:ListSubscriptionsByTopic"], Resource = local.topic_arn },
     { Sid = "OwnQueues", Effect = "Allow", Action = ["sqs:CreateQueue", "sqs:DeleteQueue", "sqs:GetQueueAttributes", "sqs:GetQueueUrl", "sqs:SetQueueAttributes", "sqs:ListQueueTags", "sqs:TagQueue", "sqs:UntagQueue", "sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility"], Resource = local.queue_arns },
-    { Sid = "OwnFunction", Effect = "Allow", Action = ["lambda:CreateFunction", "lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:DeleteFunction", "lambda:TagResource", "lambda:UntagResource", "lambda:ListTags"], Resource = local.function_arn },
+    { Sid = "OwnFunction", Effect = "Allow", Action = ["lambda:CreateFunction", "lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:GetFunctionCodeSigningConfig", "lambda:ListVersionsByFunction", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:DeleteFunction", "lambda:TagResource", "lambda:UntagResource", "lambda:ListTags"], Resource = local.function_arn },
     { Sid = "CreateOwnMapping", Effect = "Allow", Action = ["lambda:CreateEventSourceMapping"], Resource = "*", Condition = { ArnEquals = { "lambda:FunctionArn" = local.function_arn }, StringEquals = { "aws:RequestedRegion" = var.region } } },
-    { Sid = "ManageOwnMapping", Effect = "Allow", Action = ["lambda:GetEventSourceMapping", "lambda:UpdateEventSourceMapping", "lambda:DeleteEventSourceMapping"], Resource = local.mapping_arn, Condition = { ArnEquals = { "lambda:FunctionArn" = local.function_arn } } },
+    { Sid = "ManageOwnMapping", Effect = "Allow", Action = ["lambda:UpdateEventSourceMapping", "lambda:DeleteEventSourceMapping"], Resource = local.mapping_arn, Condition = { ArnEquals = { "lambda:FunctionArn" = local.function_arn } } },
+    # AWS authorizes GetEventSourceMapping against * while a deleted mapping disappears;
+    # Terraform polls this API after DeleteEventSourceMapping returns.
+    { Sid = "ReadRegionalMapping", Effect = "Allow", Action = ["lambda:GetEventSourceMapping"], Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = var.region } } },
+    { Sid = "ReadMappingTags", Effect = "Allow", Action = ["lambda:ListTags"], Resource = local.mapping_arn, Condition = { StringEquals = { "aws:RequestedRegion" = var.region } } },
     { Sid = "ListOwnMappings", Effect = "Allow", Action = ["lambda:ListEventSourceMappings"], Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = var.region } } },
-    { Sid = "OwnLogs", Effect = "Allow", Action = ["logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DescribeLogStreams", "logs:GetLogEvents", "logs:FilterLogEvents", "logs:TagResource", "logs:ListTagsForResource"], Resource = local.log_arn },
+    { Sid = "OwnLogGroup", Effect = "Allow", Action = ["logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy", "logs:DescribeLogStreams", "logs:FilterLogEvents", "logs:TagResource", "logs:ListTagsForResource"], Resource = local.log_group_arn },
+    { Sid = "ReadOwnLogStreams", Effect = "Allow", Action = ["logs:GetLogEvents"], Resource = local.log_stream_arn },
     { Sid = "DescribeRegionalLogs", Effect = "Allow", Action = ["logs:DescribeLogGroups"], Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = var.region } } },
-    { Sid = "OwnSesRegion", Effect = "Allow", Action = ["ses:VerifyDomainIdentity", "ses:DeleteIdentity", "ses:GetIdentityVerificationAttributes", "ses:CreateReceiptRuleSet", "ses:DeleteReceiptRuleSet", "ses:DescribeReceiptRuleSet", "ses:CreateReceiptRule", "ses:DeleteReceiptRule", "ses:DescribeActiveReceiptRuleSet", "ses:SetActiveReceiptRuleSet", "ses:ListReceiptRuleSets"], Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = var.region } } },
+    { Sid = "OwnSesRegion", Effect = "Allow", Action = ["ses:VerifyDomainIdentity", "ses:DeleteIdentity", "ses:GetIdentityVerificationAttributes", "ses:CreateReceiptRuleSet", "ses:DeleteReceiptRuleSet", "ses:DescribeReceiptRuleSet", "ses:CreateReceiptRule", "ses:DescribeReceiptRule", "ses:UpdateReceiptRule", "ses:DeleteReceiptRule", "ses:DescribeActiveReceiptRuleSet", "ses:SetActiveReceiptRuleSet", "ses:ListReceiptRuleSets"], Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = var.region } } },
     { Sid = "UnsubscribeOwnTopic", Effect = "Allow", Action = ["sns:Unsubscribe"], Resource = local.topic_arn },
   ] })
 }
