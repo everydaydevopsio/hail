@@ -70,8 +70,8 @@ run "provider_readback_permissions" {
     error_message = "The AWS SNS subscription provider must read and set attributes on the run topic."
   }
   assert {
-    condition     = one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Resource if s.Sid == "OwnLogGroup"]) == "arn:aws:logs:us-east-1:520473892387:log-group:/aws/lambda/hail-20261005-202402-indexer"
-    error_message = "Log group tag reads require the exact log group ARN without a stream suffix."
+    condition     = toset(one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Resource if s.Sid == "OwnLogGroup"])) == toset(["arn:aws:logs:us-east-1:520473892387:log-group:/aws/lambda/hail-20261005-202402-indexer", "arn:aws:logs:us-east-1:520473892387:log-group:/aws/lambda/hail-20261005-202402-indexer:*"])
+    error_message = "Log group creation and tagging require both ARN forms, scoped to the same run-owned group."
   }
   assert {
     condition     = alltrue([for action in ["lambda:ListVersionsByFunction", "lambda:GetFunctionCodeSigningConfig"] : contains(one([for s in jsondecode(aws_iam_policy.provisioner.policy).Statement : s.Action if s.Sid == "OwnFunction"]), action)])

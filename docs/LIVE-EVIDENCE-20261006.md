@@ -1,5 +1,7 @@
 # Hail live validation: 2026-10-06
 
+Follow-up: [2026-10-07 Cloudflare live validation](LIVE-EVIDENCE-20261007.md) records the later scoped run. This report remains the historical record of the original run.
+
 Overall result: **BLOCKED**. Real Cloudflare/SES delivery and the Chromium/Firefox product workflows passed, and all run-owned infrastructure was removed. WebKit on this host, Route53/manual live DNS, transactional/OTP live mail, controlled pipeline faults, and the full negative IAM matrix remain unverified. Do not treat this report as verification of another application.
 
 ## Run identity and boundaries
