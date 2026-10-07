@@ -68,6 +68,26 @@ class LiveRunnerTests(unittest.TestCase):
         with self.assertRaises(runner.RunError):
             runner.check_plan(plan('aws_s3_bucket', {'bucket': 'hail-owned'}), 'receiver', 'delete', MANIFEST)
 
+    def test_computed_attachment_requires_exact_owned_policy_reference(self):
+        role = MANIFEST['runId'] + '-reader'
+        data = plan('aws_iam_role_policy_attachment', {'role': role})
+        attachment = data['resource_changes'][0]
+        attachment['address'] = 'aws_iam_role_policy_attachment.reader'
+        attachment['change']['after_unknown'] = {'policy_arn': True}
+        policy = plan('aws_iam_policy', {'name': role})['resource_changes'][0]
+        policy['address'] = 'aws_iam_policy.reader'
+        data['resource_changes'].append(policy)
+        expression = {'references': ['aws_iam_policy.reader.arn', 'aws_iam_policy.reader']}
+        data['configuration'] = {'root_module': {'resources': [{'address': attachment['address'], 'expressions': {'policy_arn': expression}}]}}
+        runner.check_plan(data, 'bootstrap', 'create', MANIFEST)
+        expression['references'] = ['aws_iam_policy.unrelated.arn', 'aws_iam_policy.unrelated']
+        with self.assertRaises(runner.RunError):
+            runner.check_plan(data, 'bootstrap', 'create', MANIFEST)
+        expression['references'] = ['aws_iam_policy.reader.arn', 'aws_iam_policy.reader']
+        policy['change']['after']['name'] = 'unrelated'
+        with self.assertRaises(runner.RunError):
+            runner.check_plan(data, 'bootstrap', 'create', MANIFEST)
+
     def test_notfound_and_cli_errors_are_not_denial_evidence(self):
         for message in ['NoSuchBucket', '(NoSuchEntity)', 'invalid argument', 'AccessDenied in a parameter name']:
             self.assertFalse(checks.denial(subprocess.CompletedProcess([], 1, '', message)))

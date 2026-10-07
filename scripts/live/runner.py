@@ -105,7 +105,19 @@ def check_plan(plan, kind, action, manifest):
                 require(value['permissions_boundary'] == 'arn:aws:iam::' + manifest['accountId'] + ':policy/' + value['name'], 'Run role is missing its exact boundary')
         if resource['type'] == 'aws_iam_role_policy_attachment':
             require(value['role'] in [manifest['runId'] + '-' + role for role in ROLES], 'Unowned role attachment')
-            require(value['policy_arn'] == 'arn:aws:iam::' + manifest['accountId'] + ':policy/' + value['role'], 'Unexpected attached policy')
+            expected = 'arn:aws:iam::' + manifest['accountId'] + ':policy/' + value['role']
+            if action == 'create' and change.get('after_unknown', {}).get('policy_arn') is True:
+                role = value['role'][len(manifest['runId']) + 1:]
+                address = 'aws_iam_policy.' + role
+                configured = next((r for r in plan.get('configuration', {}).get('root_module', {}).get('resources', [])
+                                   if r['address'] == resource['address']), {})
+                references = configured.get('expressions', {}).get('policy_arn', {}).get('references', [])
+                policy = next((r for r in changes if r.get('address') == address), {})
+                require(set(references) == {address, address + '.arn'}
+                        and policy.get('change', {}).get('after', {}).get('name') == value['role'],
+                        'Computed attachment must reference its exact run policy')
+            else:
+                require(value.get('policy_arn') == expected, 'Unexpected attached policy')
         if resource['type'] == 'cloudflare_dns_record':
             require(value['zone_id'] == manifest['config']['zoneId'] and value['name'] in [manifest['domain'], '_amazonses.' + manifest['domain']], 'Plan would modify unrelated DNS')
         if resource['type'] == 'aws_s3_bucket' and value.get('bucket'):
