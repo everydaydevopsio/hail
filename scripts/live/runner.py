@@ -214,11 +214,17 @@ class Runner:
         return logfile.read_text(), result
 
     def source_env(self):
-        # No Cloudflare token, sender variables, or inherited direct AWS keys.
-        env = {'PATH': os.environ.get('PATH', '/usr/local/bin:/usr/bin:/bin'),
-               'HOME': str(Path.home()), 'AWS_PROFILE': self.config['bootstrapProfile'],
-               'AWS_REGION': self.config['region'], 'AWS_DEFAULT_REGION': self.config['region'],
-               'AWS_EC2_METADATA_DISABLED': 'true', 'AWS_PAGER': '', 'LC_ALL': 'C.UTF-8'}
+        # Bootstrap-only credential_process helpers may require injected environment.
+        # Never pass this environment to installation, application tests, or receiver phases.
+        env = dict(os.environ)
+        for key in ('CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_API_KEY', 'AWS_ACCESS_KEY_ID',
+                    'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_SECURITY_TOKEN',
+                    'AWS_DEFAULT_PROFILE', 'AWS_ROLE_ARN', 'AWS_WEB_IDENTITY_TOKEN_FILE',
+                    'AWS_CONTAINER_CREDENTIALS_FULL_URI', 'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI'):
+            env.pop(key, None)
+        env.update(HOME=str(Path.home()), AWS_PROFILE=self.config['bootstrapProfile'],
+                   AWS_REGION=self.config['region'], AWS_DEFAULT_REGION=self.config['region'],
+                   AWS_EC2_METADATA_DISABLED='true', AWS_PAGER='', LC_ALL='C.UTF-8')
         return env
 
     def source_aws(self, label, arguments):

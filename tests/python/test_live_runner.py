@@ -82,6 +82,16 @@ class LiveRunnerTests(unittest.TestCase):
         self.assertNotIn('CLOUDFLARE_API_KEY', env)
         self.assertEqual(env['AWS_CONFIG_FILE'], '/dev/null')
 
+    def test_bootstrap_preserves_helper_input_but_not_cloudflare_or_direct_keys(self):
+        instance = runner.Runner.__new__(runner.Runner)
+        instance.config = CONFIG
+        with patch.dict(os.environ, {'PROFILE_HELPER_INPUT': 'helper-secret', 'AWS_ACCESS_KEY_ID': 'wrong-identity', 'CLOUDFLARE_API_KEY': 'dns-secret'}):
+            env = instance.source_env()
+        self.assertEqual(env['PROFILE_HELPER_INPUT'], 'helper-secret')
+        self.assertEqual(env['AWS_PROFILE'], CONFIG['bootstrapProfile'])
+        self.assertNotIn('AWS_ACCESS_KEY_ID', env)
+        self.assertNotIn('CLOUDFLARE_API_KEY', env)
+
     def test_sts_credentials_never_pass_through_command_log(self):
         instance = runner.Runner.__new__(runner.Runner)
         instance.config = CONFIG
