@@ -415,9 +415,28 @@ class Runner:
         m['receiver']['status'] = 'deployed'
         self.save()
 
+    def wait_for_doctor(self):
+        # Fresh DNS can remain negatively cached after init's absence preflight.
+        # Retry only DNS readiness, never IAM, receipt-rule, or storage failures.
+        end = time.monotonic() + 600
+        while True:
+            text, code = self.sandbox('reader', ['node', 'dist/cli.js', 'doctor', '--config', '/hail/hail-direct.config.json'],
+                                      'doctor', timeout=90, ok=(0, 1))
+            report = json.loads(text)
+            results = report.get('results', [])
+            require({r.get('check') for r in results} == {'dns-mx', 'ses-identity', 'active-receipt-rule', 's3-reader'}, 'Unexpected doctor report')
+            failed = [r['check'] for r in results if r.get('ok') is not True]
+            if code == 0 and not failed:
+                return
+            self.summary['phases'][-1]['result'] = 'RETRY' if failed == ['dns-mx'] else 'FAIL'
+            self.save()
+            require(code == 1 and failed == ['dns-mx'], 'Non-DNS doctor check failed')
+            require(time.monotonic() < end, 'DNS readiness timed out after ten minutes')
+            time.sleep(10)
+
     def tests(self):
         self.assume(['reader', 'sender', 'provisioner'])
-        self.sandbox('reader', ['node', 'dist/cli.js', 'doctor', '--config', '/hail/hail-direct.config.json'], 'doctor')
+        self.wait_for_doctor()
         for role in ['reader', 'sender', 'provisioner']:
             self.sandbox(role, ['python3', '/tools/live/checks.py', 'denials', role], 'denials-' + role)
         self.audit()

@@ -134,6 +134,34 @@ class LiveRunnerTests(unittest.TestCase):
             with self.assertRaises(runner.RunError):
                 runner.private_directory(path)
 
+    def test_doctor_retries_only_dns_then_requires_success(self):
+        instance = runner.Runner.__new__(runner.Runner)
+        instance.summary = {'phases': []}
+        responses = ['dns-mx', None]
+        def sandbox(*args, **kwargs):
+            failed = responses.pop(0)
+            instance.summary['phases'].append({'result': 'PASS'})
+            return json.dumps({'results': [{'check': k, 'ok': k != failed} for k in
+                              ['dns-mx', 'ses-identity', 'active-receipt-rule', 's3-reader']]}), int(failed is not None)
+        with patch.object(instance, 'sandbox', side_effect=sandbox), patch.object(instance, 'save'), patch.object(runner.time, 'sleep'):
+            instance.wait_for_doctor()
+        self.assertEqual([p['result'] for p in instance.summary['phases']], ['RETRY', 'PASS'])
+        responses[:] = ['s3-reader']
+        with patch.object(instance, 'sandbox', side_effect=sandbox), patch.object(instance, 'save'), patch.object(runner.time, 'sleep') as sleep:
+            with self.assertRaisesRegex(runner.RunError, 'Non-DNS'):
+                instance.wait_for_doctor()
+            sleep.assert_not_called()
+
+    def test_doctor_dns_wait_is_bounded(self):
+        instance = runner.Runner.__new__(runner.Runner)
+        instance.summary = {'phases': [{'result': 'PASS'}]}
+        report = json.dumps({'results': [{'check': k, 'ok': k != 'dns-mx'} for k in
+                            ['dns-mx', 'ses-identity', 'active-receipt-rule', 's3-reader']]})
+        with patch.object(instance, 'sandbox', return_value=(report, 1)), patch.object(instance, 'save'), patch.object(runner.time, 'monotonic', side_effect=[0, 601]), patch.object(runner.time, 'sleep') as sleep:
+            with self.assertRaisesRegex(runner.RunError, 'DNS readiness timed out'):
+                instance.wait_for_doctor()
+            sleep.assert_not_called()
+
     def test_failure_still_cleans_up_and_reports_nonzero(self):
         class Fake:
             def __init__(self, *args, **kwargs):
