@@ -165,10 +165,10 @@ An optional `roleArn` uses refreshable assumed-role credentials. Legacy layout u
 For a disposable Cloudflare receiver and the complete local/live/cleanup sequence, use the [one-command live runner](docs/LIVE-RUNNER.md):
 
 ```bash
-npm run test:live:full -- --config /absolute/path/hail-live.json --execute
+npm run test:live:full -- --profile hail-bootstrap --domain example.com --region us-east-1 --execute
 ```
 
-This explicitly provisions resources and sends synthetic email. Configure the approved account/zone and prerequisites first; it is never invoked by ordinary PR CI.
+This explicitly provisions resources and sends synthetic email. Select the approved profile/domain and install prerequisites first; it is never invoked by ordinary PR CI.
 
 See [live verification](docs/LIVE-VERIFICATION.md). The live suite uses the same browser scenarios, but sends email through an explicitly configured SES sender and reads the actual receiver. It requires a deployed receiver, verified sender, appropriately restricted AWS credentials, and explicit invocation. The existing `npm run test:live` browser suite requires that receiver to be provisioned already; `test:live:full` above manages its own disposable receiver.
 

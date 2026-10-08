@@ -30,21 +30,84 @@ def plan(kind, after, actions=None):
 
 class LiveRunnerTests(unittest.TestCase):
     def test_requires_explicit_execute_before_any_cloud_or_subprocess(self):
-        with tempfile.TemporaryDirectory() as d:
-            path = Path(d) / 'config.json'
-            path.write_text(json.dumps(CONFIG))
-            with patch.object(runner, 'Runner') as constructor, patch.object(runner, 'cloudflare_token') as token, contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(runner.main(['--config', str(path)]), 0)
-                constructor.assert_not_called()
-                token.assert_not_called()
+        with patch.object(runner, 'Runner') as constructor, patch.object(runner, 'resolve_config') as discovery, patch.object(runner, 'cloudflare_token') as token, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(runner.main(['--profile', 'test-bootstrap', '--domain', 'example.test']), 0)
+            constructor.assert_not_called()
+            discovery.assert_not_called()
+            token.assert_not_called()
 
-    def test_unknown_or_secret_config_fields_are_rejected(self):
-        with tempfile.TemporaryDirectory() as d:
-            path = Path(d) / 'config.json'
-            for data in [dict(CONFIG, apiToken='secret'), dict(CONFIG, accountId='other'), dict(CONFIG, sourcePrincipalArn='arn:aws:iam::999999999999:user/tester')]:
-                path.write_text(json.dumps(data))
+    def test_invalid_options_fail_without_discovery(self):
+        for arguments in [[], ['--profile', 'test'], ['--profile', 'test', '--domain', 'https://example.test'],
+                          ['--profile', 'test', '--domain=-bad.test'],
+                          ['--profile', 'test', '--domain', 'example.test', '--expected-account', 'wrong']]:
+            with patch.object(runner, 'resolve_config') as discovery, contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(runner.main(arguments), 1)
+                discovery.assert_not_called()
+
+    def test_discovery_uses_profile_region_identity_and_exact_zone(self):
+        args = runner.parser().parse_args(['--profile', 'test-bootstrap', '--domain', 'example.test'])
+        identity = {'Account': CONFIG['accountId'], 'Arn': CONFIG['sourcePrincipalArn']}
+        zone = {'id': CONFIG['zoneId'], 'name': 'example.test', 'status': 'active'}
+        with patch.object(runner, 'discovery_aws', side_effect=['us-east-1', identity]) as aws, patch.object(runner, 'cloudflare_read', return_value=[zone]) as cf:
+            resolved = runner.resolve_config(args, 'secret')
+        self.assertEqual(resolved, dict(CONFIG, owner='tester'))
+        self.assertEqual(aws.call_args_list[0].args, ('test-bootstrap', None, ['configure', 'get', 'region']))
+        self.assertIn('name=example.test', cf.call_args.args[1])
+
+    def test_explicit_region_owner_and_expected_account(self):
+        args = runner.parser().parse_args(['--profile', 'test-bootstrap', '--domain', 'example.test', '--region', 'us-east-1', '--owner', 'test', '--expected-account', CONFIG['accountId']])
+        identity = {'Account': CONFIG['accountId'], 'Arn': CONFIG['sourcePrincipalArn']}
+        zone = {'id': CONFIG['zoneId'], 'name': 'example.test', 'status': 'active'}
+        with patch.object(runner, 'discovery_aws', return_value=identity) as aws, patch.object(runner, 'cloudflare_read', return_value=[zone]):
+            self.assertEqual(runner.resolve_config(args, 'secret'), CONFIG)
+            aws.assert_called_once_with('test-bootstrap', 'us-east-1', ['sts', 'get-caller-identity'])
+        with patch.object(runner, 'discovery_aws', return_value=dict(identity, Account='999999999999')), patch.object(runner, 'cloudflare_read') as cf:
+            with self.assertRaisesRegex(runner.RunError, 'account'):
+                runner.resolve_config(args, 'secret')
+            cf.assert_not_called()
+
+    def test_assumed_role_discovery_preserves_iam_path(self):
+        arn = 'arn:aws:iam::123456789012:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_Test_123'
+        identity = {'Account': CONFIG['accountId'], 'Arn': 'arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Test_123/session'}
+        role = {'Role': {'RoleName': 'AWSReservedSSO_Test_123', 'Arn': arn}}
+        with patch.object(runner, 'discovery_aws', side_effect=[identity, role]) as aws:
+            self.assertEqual(runner.discover_principal('test-bootstrap', 'us-east-1'), (CONFIG['accountId'], arn))
+            self.assertEqual(aws.call_args.args[2], ['iam', 'get-role', '--role-name', 'AWSReservedSSO_Test_123'])
+        role['Role']['Arn'] = 'arn:aws:iam::999999999999:role/AWSReservedSSO_Test_123'
+        with patch.object(runner, 'discovery_aws', side_effect=[identity, role]), self.assertRaises(runner.RunError):
+            runner.discover_principal('test-bootstrap', 'us-east-1')
+
+    def test_zone_discovery_rejects_missing_ambiguous_inactive_or_wrong_zone(self):
+        args = runner.parser().parse_args(['--profile', 'test-bootstrap', '--domain', 'example.test', '--region', 'us-east-1'])
+        zone = {'id': CONFIG['zoneId'], 'name': 'example.test', 'status': 'active'}
+        for zones in [[], [zone, zone], [dict(zone, status='pending')], [dict(zone, name='other.test')]]:
+            with patch.object(runner, 'discover_principal', return_value=(CONFIG['accountId'], CONFIG['sourcePrincipalArn'])), patch.object(runner, 'cloudflare_read', return_value=zones):
                 with self.assertRaises(runner.RunError):
-                    runner.read_config(path)
+                    runner.resolve_config(args, 'secret')
+
+    def test_cleanup_recovers_settings_and_pins_original_identity(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'manifest.json').write_text(json.dumps(MANIFEST))
+            args = runner.parser().parse_args(['--cleanup', d])
+            with patch.object(runner, 'discover_principal', return_value=(CONFIG['accountId'], CONFIG['sourcePrincipalArn'])) as identity, patch.object(runner, 'cloudflare_read') as cf:
+                self.assertEqual(runner.resolve_config(args, 'secret'), CONFIG)
+                identity.assert_called_once_with('test-bootstrap', 'us-east-1', CONFIG['accountId'])
+                cf.assert_not_called()
+            args.domain = 'other.test'
+            with patch.object(runner, 'discover_principal') as identity, self.assertRaises(runner.RunError):
+                runner.resolve_config(args, 'secret')
+            identity.assert_not_called()
+            args.domain = None
+            with patch.object(runner, 'discover_principal', return_value=(CONFIG['accountId'], 'arn:aws:iam::123456789012:user/other')), self.assertRaises(runner.RunError):
+                runner.resolve_config(args, 'secret')
+
+    def test_profile_discovery_scrubs_direct_credentials_and_region_override(self):
+        with patch.dict(os.environ, {'AWS_REGION': 'wrong-region', 'AWS_DEFAULT_REGION': 'wrong-region', 'AWS_ACCESS_KEY_ID': 'wrong-identity', 'CLOUDFLARE_API_KEY': 'secret'}), patch.object(runner.shutil, 'which', return_value='/usr/bin/aws'), patch.object(runner.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, 'us-east-1\n', '')) as command:
+            self.assertEqual(runner.discovery_aws('selected', None, ['configure', 'get', 'region'], raw=True), 'us-east-1')
+            env = command.call_args.kwargs['env']
+            self.assertEqual(env['AWS_PROFILE'], 'selected')
+            for key in ['AWS_REGION', 'AWS_DEFAULT_REGION', 'AWS_ACCESS_KEY_ID', 'CLOUDFLARE_API_KEY']:
+                self.assertNotIn(key, env)
 
     def test_token_alias_is_supported_but_conflicts_fail(self):
         self.assertEqual(runner.cloudflare_token({'CLOUDFLARE_API_KEY': 'bearer'}), 'bearer')
@@ -173,10 +236,9 @@ class LiveRunnerTests(unittest.TestCase):
             def remove_sessions(self): self.sessions_removed = True
             def save(self): pass
         with tempfile.TemporaryDirectory() as d:
-            path = Path(d) / 'config.json'; path.write_text(json.dumps(CONFIG))
             fake = Fake(); stream = io.StringIO()
-            with patch.object(runner, 'Runner', return_value=fake), patch.object(runner, 'cloudflare_token', return_value='secret'), patch.object(runner.signal, 'signal'), contextlib.redirect_stdout(stream):
-                result = runner.main(['--config', str(path), '--execute', '--output-dir', str(Path(d) / 'run')])
+            with patch.object(runner, 'Runner', return_value=fake), patch.object(runner, 'resolve_config', return_value=CONFIG), patch.object(runner, 'cloudflare_token', return_value='secret'), patch.object(runner.signal, 'signal'), contextlib.redirect_stdout(stream):
+                result = runner.main(['--profile', 'test-bootstrap', '--domain', 'example.test', '--execute', '--output-dir', str(Path(d) / 'run')])
             self.assertEqual(result, 1)
             self.assertTrue(fake.cleaned)
             self.assertTrue(fake.sessions_removed)
@@ -191,9 +253,9 @@ class LiveRunnerTests(unittest.TestCase):
             def remove_sessions(self): self.removed = True
             def save(self): pass
         with tempfile.TemporaryDirectory() as d:
-            path = Path(d) / 'config.json'; path.write_text(json.dumps(CONFIG)); fake = Fake()
-            with patch.object(runner, 'Runner', return_value=fake), patch.object(runner, 'cloudflare_token', return_value='secret'), patch.object(runner.signal, 'signal'), contextlib.redirect_stdout(io.StringIO()):
-                result = runner.main(['--config', str(path), '--execute', '--cleanup', d])
+            fake = Fake()
+            with patch.object(runner, 'Runner', return_value=fake), patch.object(runner, 'resolve_config', return_value=CONFIG), patch.object(runner, 'cloudflare_token', return_value='secret'), patch.object(runner.signal, 'signal'), contextlib.redirect_stdout(io.StringIO()):
+                result = runner.main(['--execute', '--cleanup', d])
             self.assertEqual(result, 1)
             self.assertEqual(fake.summary['cleanup'], 'FAILED_REQUIRES_RECOVERY')
             self.assertTrue(fake.removed)

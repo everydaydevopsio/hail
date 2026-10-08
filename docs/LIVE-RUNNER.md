@@ -3,24 +3,35 @@
 From a committed source checkout, run:
 
 ```bash
-npm run test:live:full -- --config /absolute/path/hail-live.json --execute
+npm run test:live:full -- --profile hail-bootstrap --domain example.com --region us-east-1 --execute
 ```
 
 This is an opt-in, real AWS/DNS test: it creates a fresh receiver and four restricted roles, activates its SES receipt rule set only if none is active, sends at most 200 synthetic messages, injects bounded queue faults, and tears down the run-owned resources. It does not publish a package, alter another application's authentication, request PR review, or merge a PR. Ordinary PR CI never invokes it.
 
-The complete command passed a real run with automatic cleanup; see [the 2026-10-08 evidence](LIVE-EVIDENCE-20261008.md).
+The provisioning, testing, and cleanup sequence passed a real run before the command-line discovery interface was added; see [the 2026-10-08 evidence](LIVE-EVIDENCE-20261008.md).
 
-## Configure once
+## Options and prerequisites
 
-Copy [the nonsecret example](../examples/live-cloudflare.json) outside the checkout and fill in the approved AWS account, receiving region, existing Cloudflare zone name/ID, source profile, exact source IAM principal ARN, and owner. For SSO, use the IAM role ARN including its real path, not an edited STS session ARN. The runner verifies the current identity and resolves the role with IAM.
+No input configuration file is needed. Select an authenticated AWS profile and an existing Cloudflare zone domain:
 
-Supply a zone-scoped bearer token in `CLOUDFLARE_API_TOKEN`. `CLOUDFLARE_API_KEY` is accepted as an alias for a bearer token, matching the previous live run; it does **not** mean Cloudflare's email/global-API-key authentication. Conflicting values are rejected. Never put credentials in the JSON file or Git.
+| Option               | Purpose                                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `--profile`          | AWS bootstrap profile; required for a new run.                                                       |
+| `--domain`           | Exact Cloudflare zone domain; required for a new run. The receiver uses a generated fresh subdomain. |
+| `--region`           | SES receiving region; defaults to the selected profile's configured region.                          |
+| `--expected-account` | Optional 12-digit AWS account guard; a mismatch stops before provisioning.                           |
+| `--owner`            | Resource owner tag; defaults to the authenticated IAM user or role name.                             |
+| `--execute`          | Authorize discovery and the complete provisioning/test/cleanup sequence.                             |
+
+With `--execute`, the runner discovers the AWS account through STS and the Cloudflare zone ID through an exact zone-name lookup. It requires one accessible active matching zone. For assumed-role and SSO profiles, IAM `GetRole` resolves the full role ARN, preserving its path for the trust policy. Root and federated-user identities are unsupported. The resolved account, principal, zone, and owner are pinned in the private run manifest for subsequent identity checks and cleanup.
+
+Supply a zone-scoped bearer token in `CLOUDFLARE_API_TOKEN`. `CLOUDFLARE_API_KEY` is accepted as an alias for a bearer token, matching the previous live run; it does **not** mean Cloudflare's email/global-API-key authentication. Conflicting values are rejected. The token needs Zone Read and DNS Edit permissions for the selected zone. Keep it in the environment, not command arguments or Git.
 
 Linux prerequisites are Node.js 22+, Python 3.12+, AWS CLI v2, Terraform 1.9.8, Git, Bubblewrap, and Playwright's Linux browser libraries. Node/npm/AWS CLI must be installed beneath `/usr` or `/usr/local`; Terraform must be on `PATH`. The minimal filesystem sandbox deliberately does not expose home-directory toolchains or credential helpers. Set up OS browser dependencies once using the repository's pinned Playwright version (`npx playwright install-deps chromium firefox webkit`) before running the full command. The command downloads all three browsers and installs its own snapshot's npm dependencies without AWS or Cloudflare credentials.
 
-The bootstrap profile must already be authenticated through the standard AWS configuration. Bootstrap processes preserve environment required by `credential_process` helpers; that environment is never passed into the isolated dependency or test phases. Its use is restricted to IAM bootstrap, policy validation/simulation, obtaining short-lived role sessions, and bootstrap teardown. Receiver operations and live tests run with restricted sessions. The source account must permit SES receiving in the chosen region and scoped SES sending; sandbox sender/recipient verification is satisfied by the generated domain when both use that region. The runner stops on provider failures; it never silently widens IAM policies.
+The bootstrap profile must already be authenticated through the standard AWS configuration. Bootstrap processes preserve environment required by `credential_process` helpers; that environment is never passed into the isolated dependency or test phases. Its use is restricted to identity/region discovery, IAM bootstrap, policy validation/simulation, obtaining short-lived role sessions, and bootstrap teardown. Receiver operations and live tests run with restricted sessions. The source account must permit SES receiving in the chosen region and scoped SES sending; sandbox sender/recipient verification is satisfied by the generated domain when both use that region. The runner stops on provider failures; it never silently widens IAM policies.
 
-Without `--execute`, the command validates only the configuration and makes no cloud calls. `--execute` is the explicit authorization for this configuration and the generated fresh subdomain/sender. The region must have no active receipt rule set; existing shared sets are intentionally unsupported by this disposable full-run command.
+Without `--execute`, the command checks option syntax only and makes no cloud calls; it does not validate credentials or discover account/zone details. `--execute` authorizes the selected target and the generated fresh subdomain/sender. The resolved account, region, and zone are printed before the run starts. The region must have no active receipt rule set; existing shared sets are intentionally unsupported by this disposable full-run command.
 
 ## What runs
 
@@ -39,10 +50,12 @@ The command prints its private run directory and fixed phase labels. `summary.js
 
 Use `--output-dir /private/new-directory` to choose an artifact location; it must not already exist. The source checkout is not modified. A lock prevents simultaneous use of the same run directory.
 
-On failure or Ctrl-C, cleanup is attempted. If credentials expire, provider APIs fail, or a different SES rule set becomes active, the command fails closed, retains the states and manifest, and prints a recovery instruction. It never destroys bootstrap roles while receiver cleanup remains incomplete. After resolving access, use the same nonsecret configuration and a fresh Cloudflare environment token:
+On failure or Ctrl-C, cleanup is attempted. If credentials expire, provider APIs fail, or a different SES rule set becomes active, the command fails closed, retains the states and manifest, and prints a recovery instruction. It never destroys bootstrap roles while receiver cleanup remains incomplete. After resolving access, authenticate the original AWS profile and supply a fresh Cloudflare environment token. Cleanup reads the pinned settings from the retained run manifest and verifies the original account and IAM principal; no profile/domain flags are needed:
 
 ```bash
-npm run test:live:full -- --config /absolute/path/hail-live.json --cleanup /private/retained-run --execute
+npm run test:live:full -- --cleanup /private/retained-run --execute
 ```
+
+Any profile/domain/region/owner/account options supplied with `--cleanup` must match the saved run. Cleanup also accepts manifests from the earlier runner.
 
 Do not delete the private run directory until cleanup is confirmed. SIGKILL, host failure, and external infrastructure changes can prevent automatic cleanup; retained state is the recovery mechanism. The parent command still has bootstrap access; isolation of child processes does not constrain the parent itself.

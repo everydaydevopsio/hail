@@ -9,13 +9,9 @@ The new [full live runner](LIVE-RUNNER.md) completed in one invocation with exit
 - Packed artifact SHA-256: `d3ede4816db04338468a9cb77c87170efd09bea6dce2d66ac721427929abb778`.
 - Linux, Node 24.21.0, Python 3.12.3, Terraform 1.9.8, pinned Playwright 1.63.0 and checked-in provider lockfiles. All browser runs were headless.
 
-With Terraform on `PATH`, the command was:
+This evidence covers the earlier runner interface at the exact revision above. The current [profile/domain command-line interface](LIVE-RUNNER.md) was added later; this historical result does not claim a fresh live run of that interface.
 
-```bash
-npm run test:live:full -- --config /tmp/hail-live-cli-config.json --execute --output-dir /tmp/hail-command-verification-4
-```
-
-The private configuration named the approved account, zone, source principal/profile, and owner. `CLOUDFLARE_API_KEY` supplied the bearer token without appearing in configuration or command arguments. Bootstrap credential-helper environment was available only to bootstrap operations. Dependency installation and application tests used the minimal Bubblewrap filesystem/environment allowlist, without the host home or source profile. Restricted reader/sender identities were independently checked. The parent process retained bootstrap access.
+The run used the approved account, zone, source principal/profile, and owner. `CLOUDFLARE_API_KEY` supplied the bearer token without appearing in command arguments. Bootstrap credential-helper environment was available only to bootstrap operations. Dependency installation and application tests used the minimal Bubblewrap filesystem/environment allowlist, without the host home or source profile. Restricted reader/sender identities were independently checked. The parent process retained bootstrap access.
 
 ## Results
 

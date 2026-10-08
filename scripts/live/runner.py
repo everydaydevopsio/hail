@@ -1,7 +1,7 @@
 """Orchestrate local proof, restricted live phases, and recoverable teardown.
 
-Only bootstrap() and source_aws() use the source profile. Everything else runs
-in a filesystem allowlist sandbox without the host credential chain.
+Read-only discovery and bootstrap operations use the source profile. Application
+phases run in a filesystem allowlist sandbox without the host credential chain.
 """
 import argparse
 import datetime as dt
@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shlex
 import shutil
 import signal
 import stat
@@ -53,8 +54,7 @@ def write_json(path, value):
     os.replace(temporary, path)
 
 
-def read_config(path):
-    data = json.loads(Path(path).read_text())
+def validate_config(data):
     require(isinstance(data, dict) and set(data) == CONFIG_KEYS, 'Config must contain exactly the documented nonsecret fields')
     require(all(isinstance(v, str) and v and not any(c in v for c in '\r\n\x00') for v in data.values()), 'Invalid config values')
     require(bool(re.fullmatch(r'\d{12}', data['accountId'])), 'Invalid AWS account ID')
@@ -83,6 +83,102 @@ def clean_env(home, path=None):
     return {'PATH': path or '/usr/local/bin:/usr/bin:/bin', 'HOME': str(home),
             'AWS_CONFIG_FILE': '/dev/null', 'AWS_SHARED_CREDENTIALS_FILE': '/dev/null',
             'AWS_EC2_METADATA_DISABLED': 'true', 'AWS_PAGER': '', 'LC_ALL': 'C.UTF-8'}
+
+
+def bootstrap_env(profile, region=None):
+    # Bootstrap-only credential_process helpers may require injected environment.
+    # Never pass this environment to installation, application tests, or receiver phases.
+    env = dict(os.environ)
+    for key in ('CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_API_KEY', 'AWS_ACCESS_KEY_ID',
+                'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_SECURITY_TOKEN',
+                'AWS_DEFAULT_PROFILE', 'AWS_ROLE_ARN', 'AWS_WEB_IDENTITY_TOKEN_FILE',
+                'AWS_CONTAINER_CREDENTIALS_FULL_URI', 'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI'):
+        env.pop(key, None)
+    env.pop('AWS_REGION', None)
+    env.pop('AWS_DEFAULT_REGION', None)
+    env.update(HOME=str(Path.home()), AWS_PROFILE=profile,
+               AWS_EC2_METADATA_DISABLED='true', AWS_PAGER='', LC_ALL='C.UTF-8')
+    if region:
+        env.update(AWS_REGION=region, AWS_DEFAULT_REGION=region)
+    return env
+
+
+def cloudflare_read(token, suffix):
+    req = urllib.request.Request('https://api.cloudflare.com/client/v4/' + suffix, headers={'Authorization': 'Bearer ' + token})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            data = json.load(response)
+    except Exception:
+        raise RunError('Cloudflare read-only preflight failed') from None
+    require(data.get('success') is True, 'Cloudflare preflight returned failure')
+    return data['result']
+
+
+def discovery_aws(profile, region, arguments, raw=False):
+    executable = shutil.which('aws')
+    require(executable is not None, 'Missing prerequisite: aws')
+    command = [executable, *arguments, '--profile', profile]
+    if region:
+        command += ['--region', region]
+    if not raw:
+        command += ['--output', 'json']
+    result = subprocess.run(command, env=bootstrap_env(profile, region), capture_output=True, text=True, timeout=90)
+    require(result.returncode == 0, 'AWS discovery failed; authenticate the selected profile and supply --region if needed')
+    return result.stdout.strip() if raw else json.loads(result.stdout)
+
+
+def validate_options(args):
+    require(not (args.cleanup and args.output_dir), 'Choose cleanup or a new output directory')
+    require(bool(args.cleanup) or bool(args.profile and args.domain), 'New runs require --profile and --domain')
+    for value in (args.profile, args.domain, args.region, args.owner, args.expected_account):
+        require(value is None or (bool(value) and not any(c in value for c in '\r\n\x00')), 'Invalid command-line value')
+    if args.domain:
+        require(len(args.domain) <= 253 and '.' in args.domain and all(re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label) for label in args.domain.split('.')), 'Use the existing Cloudflare zone domain, without a scheme or path')
+    if args.region:
+        require(bool(re.fullmatch(r'[a-z]{2}-[a-z]+-\d', args.region)), 'Invalid AWS region')
+    if args.expected_account:
+        require(bool(re.fullmatch(r'\d{12}', args.expected_account)), 'Invalid expected AWS account ID')
+    if args.owner:
+        require(len(args.owner) <= 128, 'Owner tag is too long')
+
+
+def discover_principal(profile, region, expected_account=None):
+    identity = discovery_aws(profile, region, ['sts', 'get-caller-identity'])
+    account, arn = identity['Account'], identity['Arn']
+    require(bool(re.fullmatch(r'\d{12}', account)), 'Invalid discovered AWS account')
+    require(expected_account is None or account == expected_account, 'AWS account does not match --expected-account or the saved run')
+    if re.fullmatch(r'arn:aws:iam::' + account + r':user/[A-Za-z0-9_+=,.@/-]+', arn):
+        return account, arn
+    assumed = re.fullmatch(r'arn:aws:sts::' + account + r':assumed-role/([A-Za-z0-9_+=,.@-]+)/[^/]+', arn)
+    require(assumed is not None, 'Use an IAM user or assumed-role profile for bootstrap')
+    name = assumed.group(1)
+    role = discovery_aws(profile, region, ['iam', 'get-role', '--role-name', name])['Role']
+    principal = role['Arn']
+    require(role['RoleName'] == name and bool(re.fullmatch(r'arn:aws:iam::' + account + r':role/[A-Za-z0-9_+=,.@/-]+', principal))
+            and principal.rsplit('/', 1)[-1] == name, 'Discovered IAM role does not match the current session')
+    return account, principal
+
+
+def resolve_config(args, token):
+    if args.cleanup:
+        directory = Path(args.cleanup)
+        private_directory(directory)
+        config = validate_config(json.loads((directory / 'manifest.json').read_text())['config'])
+        for field, value in [('bootstrapProfile', args.profile), ('zoneName', args.domain), ('region', args.region),
+                             ('owner', args.owner), ('accountId', args.expected_account)]:
+            require(value is None or value == config[field], 'Cleanup options must match the saved run')
+        account, principal = discover_principal(config['bootstrapProfile'], config['region'], config['accountId'])
+        require(principal == config['sourcePrincipalArn'], 'Cleanup principal does not match the saved run')
+        return config
+    region = args.region or discovery_aws(args.profile, None, ['configure', 'get', 'region'], raw=True)
+    require(bool(re.fullmatch(r'[a-z]{2}-[a-z]+-\d', region)), 'Set --region or configure a receiving region in the selected AWS profile')
+    account, principal = discover_principal(args.profile, region, args.expected_account)
+    zones = cloudflare_read(token, 'zones?' + urllib.parse.urlencode({'name': args.domain, 'per_page': 50}))
+    require(isinstance(zones, list) and len(zones) == 1 and zones[0].get('name') == args.domain
+            and zones[0].get('status') == 'active', 'Expected exactly one accessible active Cloudflare zone matching --domain')
+    return validate_config({'accountId': account, 'sourcePrincipalArn': principal, 'region': region,
+                            'bootstrapProfile': args.profile, 'zoneName': args.domain, 'zoneId': zones[0]['id'],
+                            'owner': args.owner or principal.rsplit('/', 1)[-1]})
 
 
 def managed_resources(state):
@@ -226,18 +322,7 @@ class Runner:
         return logfile.read_text(), result
 
     def source_env(self):
-        # Bootstrap-only credential_process helpers may require injected environment.
-        # Never pass this environment to installation, application tests, or receiver phases.
-        env = dict(os.environ)
-        for key in ('CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_API_KEY', 'AWS_ACCESS_KEY_ID',
-                    'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AWS_SECURITY_TOKEN',
-                    'AWS_DEFAULT_PROFILE', 'AWS_ROLE_ARN', 'AWS_WEB_IDENTITY_TOKEN_FILE',
-                    'AWS_CONTAINER_CREDENTIALS_FULL_URI', 'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI'):
-            env.pop(key, None)
-        env.update(HOME=str(Path.home()), AWS_PROFILE=self.config['bootstrapProfile'],
-                   AWS_REGION=self.config['region'], AWS_DEFAULT_REGION=self.config['region'],
-                   AWS_EC2_METADATA_DISABLED='true', AWS_PAGER='', LC_ALL='C.UTF-8')
-        return env
+        return bootstrap_env(self.config['bootstrapProfile'], self.config['region'])
 
     def source_aws(self, label, arguments):
         if arguments[:2] == ['sts', 'assume-role']:
@@ -261,14 +346,7 @@ class Runner:
         return identity
 
     def cf(self, suffix):
-        req = urllib.request.Request('https://api.cloudflare.com/client/v4/' + suffix, headers={'Authorization': 'Bearer ' + self.token})
-        try:
-            with urllib.request.urlopen(req, timeout=30) as response:
-                data = json.load(response)
-        except Exception:
-            raise RunError('Cloudflare read-only preflight failed') from None
-        require(data.get('success') is True, 'Cloudflare preflight returned failure')
-        return data['result']
+        return cloudflare_read(self.token, suffix)
 
     def sandbox(self, role, args, label, *, cwd='/hail/work', timeout=900, ok=(0,), live=False):
         mounts = ['--die-with-parent', '--unshare-pid', '--unshare-ipc', '--unshare-uts', '--new-session',
@@ -534,7 +612,11 @@ class Runner:
 
 def parser():
     p = argparse.ArgumentParser(description='Cloudflare live test: installs local dependencies, provisions a fresh receiver, sends <=200 synthetic messages, tests, and tears down. Linux only.')
-    p.add_argument('--config', required=True, help='Nonsecret JSON account/zone/profile configuration')
+    p.add_argument('--profile', help='AWS bootstrap profile (required for a new run)')
+    p.add_argument('--domain', help='Existing Cloudflare zone domain; a fresh test subdomain is generated')
+    p.add_argument('--region', help='SES receiving region; defaults to the selected profile region')
+    p.add_argument('--expected-account', help='Optional exact AWS account ID guard')
+    p.add_argument('--owner', help='Resource owner tag; defaults to the authenticated IAM user or role name')
     p.add_argument('--execute', action='store_true', help='Explicitly authorize provisioning, SES activation if none is active, synthetic mail, fault probes, and cleanup')
     p.add_argument('--cleanup', metavar='RUN_DIR', help='Retry cleanup only using the retained private manifest and states')
     p.add_argument('--output-dir', help='New private run directory (must not exist)')
@@ -549,12 +631,13 @@ def _main(argv=None):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, interrupt)
     try:
-        config = read_config(args.config)
-        require(not (args.cleanup and args.output_dir), 'Choose cleanup or a new output directory')
+        validate_options(args)
         if not args.execute:
-            print('Configuration is valid. No cloud calls made. Add --execute to authorize the full run and cleanup.')
+            print('Options are valid. No cloud calls made. Add --execute to discover the account/zone and authorize the full run and cleanup.')
             return 0
         token = cloudflare_token(os.environ)
+        config = resolve_config(args, token)
+        print('Target: AWS ' + config['accountId'] + ', ' + config['region'] + ', Cloudflare ' + config['zoneName'], flush=True)
         if args.cleanup:
             directory = Path(args.cleanup)
         elif args.output_dir:
@@ -591,7 +674,7 @@ def _main(argv=None):
         runner.save()
         print(runner.summary['result'] + ': see ' + str(directory / 'summary.json'), flush=True)
         if runner.summary['cleanup'] == 'FAILED_REQUIRES_RECOVERY':
-            print('Resources may remain. Retry with --config YOUR_CONFIG --cleanup ' + str(directory) + ' --execute', flush=True)
+            print('Resources may remain. Retry with npm run test:live:full -- --cleanup ' + shlex.quote(str(directory)) + ' --execute', flush=True)
         return 1 if failure else 0
     except (Exception, KeyboardInterrupt) as error:
         # Config/prerequisite errors are safe; arbitrary provider/process text is never forwarded.
