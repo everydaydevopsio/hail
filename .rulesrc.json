@@ -1,0 +1,57 @@
+{
+  "targets": [
+    "codex",
+    "claude"
+  ],
+  "agents": [
+    "local-dev",
+    "docs",
+    "cicd",
+    "git-hooks",
+    "tasks",
+    "plan-lifecycle",
+    "testing-process",
+    "core",
+    "linting",
+    "testing"
+  ],
+  "skills": [
+    "ballast-audit"
+  ],
+  "ballastVersion": "5.21.3",
+  "languages": [
+    "typescript",
+    "terraform"
+  ],
+  "paths": {
+    "terraform": [
+      ".",
+      "terraform/bootstrap",
+      "terraform/examples/cloudflare",
+      "terraform/examples/manual",
+      "terraform/examples/route53",
+      "terraform/modules/receiver"
+    ],
+    "typescript": [
+      "."
+    ]
+  },
+  "tools": {
+    "terraform": [
+      "tfenv",
+      "tflint",
+      "trivy"
+    ],
+    "typescript": [
+      "npm"
+    ]
+  },
+  "discovery": {
+    "excludePaths": [
+      "upstream",
+      ".dev-tools"
+    ]
+  },
+  "taskSystem": "github",
+  "deploymentModel": "none"
+}

@@ -1,0 +1,10 @@
+upstream/
+.ballast/
+.claude/
+.codex/
+dist/
+node_modules/
+coverage/
+test-results/
+.dev-tools/
+.rulesrc.json
