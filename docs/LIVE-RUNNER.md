@@ -8,6 +8,8 @@ npm run test:live:full -- --config /absolute/path/hail-live.json --execute
 
 This is an opt-in, real AWS/DNS test: it creates a fresh receiver and four restricted roles, activates its SES receipt rule set only if none is active, sends at most 200 synthetic messages, injects bounded queue faults, and tears down the run-owned resources. It does not publish a package, alter another application's authentication, request PR review, or merge a PR. Ordinary PR CI never invokes it.
 
+The complete command passed a real run with automatic cleanup; see [the 2026-10-08 evidence](LIVE-EVIDENCE-20261008.md).
+
 ## Configure once
 
 Copy [the nonsecret example](../examples/live-cloudflare.json) outside the checkout and fill in the approved AWS account, receiving region, existing Cloudflare zone name/ID, source profile, exact source IAM principal ARN, and owner. For SSO, use the IAM role ARN including its real path, not an edited STS session ARN. The runner verifies the current identity and resolves the role with IAM.

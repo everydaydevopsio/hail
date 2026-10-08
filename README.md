@@ -170,7 +170,7 @@ npm run test:live:full -- --config /absolute/path/hail-live.json --execute
 
 This explicitly provisions resources and sends synthetic email. Configure the approved account/zone and prerequisites first; it is never invoked by ordinary PR CI.
 
-See [live verification](docs/LIVE-VERIFICATION.md). The live suite uses the same browser scenarios, but sends email through an explicitly configured SES sender and reads the actual receiver. It requires a deployed receiver, verified sender, appropriately restricted AWS credentials, and explicit invocation. No cloud resources are created by the test workflow.
+See [live verification](docs/LIVE-VERIFICATION.md). The live suite uses the same browser scenarios, but sends email through an explicitly configured SES sender and reads the actual receiver. It requires a deployed receiver, verified sender, appropriately restricted AWS credentials, and explicit invocation. The existing `npm run test:live` browser suite requires that receiver to be provisioned already; `test:live:full` above manages its own disposable receiver.
 
 SES receipt proves delivery to this SES inbox, not Gmail/Outlook inbox placement or native email-client rendering. A live run against the demo application is not a substitute for running the generated recipe against your own application.
 
