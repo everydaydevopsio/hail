@@ -6,6 +6,8 @@ Playwright-native tests for magic-link logins, invitations, one-time codes, and 
 
 **Status: initial integration, not an npm release or a verified live AWS deployment.** Use the checked-out source or a locally packed tarball. The automated suite separates local browser proof from the opt-in live delivery gate.
 
+Start with the [AWS quickstart](docs/QUICKSTART.md) to deploy with Cloudflare and a GitHub-sourced Terraform module, then run your first email workflow test.
+
 ## What is included
 
 - TypeScript email client with unique inboxes, checkpoints, sender/subject filters, bounded waits, message consumption, pagination, and legacy SES-client storage support.
@@ -162,7 +164,15 @@ An optional `roleArn` uses refreshable assumed-role credentials. Legacy layout u
 
 ## Live delivery gate
 
-See [live verification](docs/LIVE-VERIFICATION.md). The live suite uses the same browser scenarios, but sends email through an explicitly configured SES sender and reads the actual receiver. It requires a deployed receiver, verified sender, appropriately restricted AWS credentials, and explicit invocation. No cloud resources are created by the test workflow.
+For a disposable Cloudflare receiver and the complete local/live/cleanup sequence, use the [one-command live runner](docs/LIVE-RUNNER.md):
+
+```bash
+npm run test:live:full -- --profile hail-bootstrap --domain example.com --region us-east-1 --execute
+```
+
+This explicitly provisions resources and sends synthetic email. Select the approved profile/domain and install prerequisites first; it is never invoked by ordinary PR CI.
+
+See [live verification](docs/LIVE-VERIFICATION.md). The live suite uses the same browser scenarios, but sends email through an explicitly configured SES sender and reads the actual receiver. It requires a deployed receiver, verified sender, appropriately restricted AWS credentials, and explicit invocation. The existing `npm run test:live` browser suite requires that receiver to be provisioned already; `test:live:full` above manages its own disposable receiver.
 
 SES receipt proves delivery to this SES inbox, not Gmail/Outlook inbox placement or native email-client rendering. A live run against the demo application is not a substitute for running the generated recipe against your own application.
 
