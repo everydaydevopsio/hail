@@ -6,6 +6,8 @@ Playwright-native tests for magic-link logins, invitations, one-time codes, and 
 
 **Status: initial integration, not an npm release or a verified live AWS deployment.** Use the checked-out source or a locally packed tarball. The automated suite separates local browser proof from the opt-in live delivery gate.
 
+Start with the [AWS quickstart](docs/QUICKSTART.md) to deploy with Cloudflare and a GitHub-sourced Terraform module, then run your first email workflow test.
+
 ## What is included
 
 - TypeScript email client with unique inboxes, checkpoints, sender/subject filters, bounded waits, message consumption, pagination, and legacy SES-client storage support.
