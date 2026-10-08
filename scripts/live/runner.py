@@ -130,7 +130,7 @@ def discovery_aws(profile, region, arguments, raw=False):
 def validate_options(args):
     require(not (args.cleanup and args.output_dir), 'Choose cleanup or a new output directory')
     require(bool(args.cleanup) or bool(args.profile and args.domain), 'New runs require --profile and --domain')
-    for value in (args.profile, args.domain, args.region, args.owner, args.expected_account):
+    for value in (args.profile, args.domain, args.region, args.owner, args.expected_account, args.terraform_binary):
         require(value is None or (bool(value) and not any(c in value for c in '\r\n\x00')), 'Invalid command-line value')
     if args.domain:
         require(len(args.domain) <= 253 and '.' in args.domain and all(re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label) for label in args.domain.split('.')), 'Use the existing Cloudflare zone domain, without a scheme or path')
@@ -179,6 +179,44 @@ def resolve_config(args, token):
     return validate_config({'accountId': account, 'sourcePrincipalArn': principal, 'region': region,
                             'bootstrapProfile': args.profile, 'zoneName': args.domain, 'zoneId': zones[0]['id'],
                             'owner': args.owner or principal.rsplit('/', 1)[-1]})
+
+
+def tfenv_executable(launcher):
+    # Ask tfenv itself for selection/configuration, including Homebrew wrappers.
+    # Its command dispatch exports the effective config directory to this helper.
+    sibling = launcher.parent / 'tfenv'
+    tfenv = str(sibling) if sibling.is_file() and os.access(sibling, os.X_OK) else shutil.which('tfenv')
+    require(tfenv is not None, 'Terraform launcher uses tfenv but tfenv is unavailable')
+    with tempfile.TemporaryDirectory(prefix='hail-tfenv-') as directory:
+        helper = Path(directory) / 'tfenv-hail-resolve'
+        helper.write_text('#!/bin/bash\nset -euo pipefail\nversion="$(tfenv-version-name)"\nprintf \'%s\\n%s\\n\' "$TFENV_CONFIG_DIR" "$version"\n')
+        helper.chmod(0o700)
+        env = clean_env(Path.home(), directory + ':' + os.environ.get('PATH', '/usr/local/bin:/usr/bin:/bin'))
+        for key in ('TFENV_ROOT', 'TFENV_CONFIG_DIR', 'TFENV_TERRAFORM_VERSION', 'XDG_CONFIG_HOME'):
+            if os.environ.get(key):
+                env[key] = os.environ[key]
+        env.update(TFENV_AUTO_INSTALL='false', TFENV_DEBUG='0')
+        result = subprocess.run([tfenv, 'hail-resolve'], cwd=REPO, env=env, capture_output=True, text=True, timeout=30)
+    require(result.returncode == 0, 'tfenv could not resolve an installed Terraform version; run tfenv install for the selected version')
+    lines = result.stdout.splitlines()
+    require(len(lines) == 2 and bool(lines[0]) and bool(re.fullmatch(r'\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.+-]+)?', lines[1])), 'tfenv returned an invalid Terraform selection')
+    return Path(lines[0]) / 'versions' / lines[1] / 'terraform'
+
+
+def terraform_executable(override=None):
+    executable = override or shutil.which('terraform')
+    require(executable is not None, 'Missing prerequisite: terraform; use --terraform-binary /path/to/terraform')
+    launcher = Path(executable).expanduser().absolute()
+    path = launcher.resolve()
+    require(path.is_file() and os.access(path, os.X_OK), 'Terraform binary must be an executable file')
+    with path.open('rb') as source:
+        header = source.read(8192)
+    if header.startswith(b'#!') and b'tfenv' in header.lower():
+        path = tfenv_executable(launcher).resolve()
+        require(path.is_file() and os.access(path, os.X_OK), 'Selected tfenv Terraform is not installed; run tfenv install first')
+        with path.open('rb') as source:
+            require(source.read(4) == b'\x7fELF', 'Selected tfenv Terraform must be a native Linux executable')
+    return str(path)
 
 
 def managed_resources(state):
@@ -239,7 +277,7 @@ def check_plan(plan, kind, action, manifest):
 
 
 class Runner:
-    def __init__(self, config, token, directory, cleanup=False):
+    def __init__(self, config, token, directory, cleanup=False, terraform_binary=None):
         self.config, self.token = config, token
         self.directory = Path(directory).resolve()
         private_directory(self.directory)
@@ -255,10 +293,11 @@ class Runner:
                        'IAM simulations are separate from live denial canaries',
                        'Parent process retains bootstrap access; tests do not']}
         self.tools = {}
-        for name in ['node', 'npm', 'aws', 'terraform', 'bwrap', 'git']:
+        for name in ['node', 'npm', 'aws', 'bwrap', 'git']:
             executable = shutil.which(name)
             require(executable is not None, 'Missing prerequisite: ' + name)
             self.tools[name] = str(Path(executable).resolve())
+        self.tools['terraform'] = terraform_executable(terraform_binary)
         # Only the explicitly allowlisted system runtime is exposed to children.
         for name in ['node', 'npm', 'aws']:
             require(self.tools[name].startswith('/usr/'), 'Install ' + name + ' under /usr or /usr/local for the Linux isolated runner')
@@ -401,6 +440,14 @@ class Runner:
     def bootstrap(self, label, args, source=True):
         return self.command(label, [self.tools['terraform'], '-chdir=' + str(self.directory / 'bootstrap'), *args], env=self.source_env() if source else clean_env(self.directory / 'home'))
 
+    def terraform_preflight(self):
+        try:
+            text, _ = self.sandbox(None, ['terraform', 'version', '-json'], 'terraform-preflight', cwd='/hail', timeout=30)
+            self.summary['terraformVersion'] = json.loads(text)['terraform_version']
+            self.save()
+        except (RunError, subprocess.TimeoutExpired):
+            raise RunError('Terraform cannot run inside the sandbox. Use --terraform-binary with a standalone executable, not an unsupported launcher; see the private terraform-preflight log') from None
+
     def initialize(self):
         require(not subprocess.check_output([self.tools['git'], '-C', str(REPO), 'status', '--porcelain', '--untracked-files=no']).strip(), 'Commit tracked changes before running live so evidence names an exact revision')
         commit = subprocess.check_output([self.tools['git'], '-C', str(REPO), 'rev-parse', 'HEAD'], text=True).strip()
@@ -423,6 +470,7 @@ class Runner:
         archive.unlink()
         require((work / 'scripts/live/child.py').exists(), 'Commit the live runner before executing it')
         self.sandbox(None, ['true'], 'isolation-preflight')
+        self.terraform_preflight()
         self.sandbox(None, ['npm', 'ci'], 'dependencies')
         self.sandbox(None, ['npx', '--no-install', 'playwright', 'install', 'chromium', 'firefox', 'webkit'], 'browser-download', timeout=900)
         for script in ['build', 'typecheck', 'test', 'test:python', 'test:e2e', 'test:package']:
@@ -563,6 +611,7 @@ class Runner:
         return json.loads(file.read_text()) if file.exists() else {}
 
     def cleanup(self):
+        self.terraform_preflight()
         self.summary['cleanup'] = 'RUNNING'
         self.save()
         m = self.manifest
@@ -616,6 +665,7 @@ def parser():
     p.add_argument('--domain', help='Existing Cloudflare zone domain; a fresh test subdomain is generated')
     p.add_argument('--region', help='SES receiving region; defaults to the selected profile region')
     p.add_argument('--expected-account', help='Optional exact AWS account ID guard')
+    p.add_argument('--terraform-binary', help='Path to the standalone Terraform executable; overrides PATH and version-manager launchers')
     p.add_argument('--owner', help='Resource owner tag; defaults to the authenticated IAM user or role name')
     p.add_argument('--execute', action='store_true', help='Explicitly authorize provisioning, SES activation if none is active, synthetic mail, fault probes, and cleanup')
     p.add_argument('--cleanup', metavar='RUN_DIR', help='Retry cleanup only using the retained private manifest and states')
@@ -646,7 +696,7 @@ def _main(argv=None):
         else:
             directory = Path(tempfile.mkdtemp(prefix='hail-live-'))
         print('Private run directory: ' + str(directory), flush=True)
-        runner = Runner(config, token, directory, cleanup=bool(args.cleanup))
+        runner = Runner(config, token, directory, cleanup=bool(args.cleanup), terraform_binary=args.terraform_binary)
         failure = None
         try:
             if not args.cleanup:
@@ -655,6 +705,9 @@ def _main(argv=None):
                 runner.tests()
         except (Exception, KeyboardInterrupt) as error:
             failure = type(error).__name__
+            if isinstance(error, RunError):
+                runner.summary['failureReason'] = str(error)
+                print(str(error), flush=True)
             print('Run stopped; attempting guarded cleanup. Details remain private.', flush=True)
         finally:
             # Ignore a second interrupt while cleanup is in progress; command timeouts remain bounded.
@@ -674,7 +727,8 @@ def _main(argv=None):
         runner.save()
         print(runner.summary['result'] + ': see ' + str(directory / 'summary.json'), flush=True)
         if runner.summary['cleanup'] == 'FAILED_REQUIRES_RECOVERY':
-            print('Resources may remain. Retry with npm run test:live:full -- --cleanup ' + shlex.quote(str(directory)) + ' --execute', flush=True)
+            binary_option = ' --terraform-binary ' + shlex.quote(args.terraform_binary) if args.terraform_binary else ''
+            print('Resources may remain. Retry with npm run test:live:full -- --cleanup ' + shlex.quote(str(directory)) + binary_option + ' --execute', flush=True)
         return 1 if failure else 0
     except (Exception, KeyboardInterrupt) as error:
         # Config/prerequisite errors are safe; arbitrary provider/process text is never forwarded.

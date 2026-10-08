@@ -109,6 +109,64 @@ class LiveRunnerTests(unittest.TestCase):
             for key in ['AWS_REGION', 'AWS_DEFAULT_REGION', 'AWS_ACCESS_KEY_ID', 'CLOUDFLARE_API_KEY']:
                 self.assertNotIn(key, env)
 
+    def test_explicit_terraform_binary_overrides_path_launcher(self):
+        with tempfile.TemporaryDirectory() as d:
+            binary = Path(d) / 'terraform'
+            binary.write_bytes(b'fixture')
+            binary.chmod(0o700)
+            with patch.object(runner.shutil, 'which', return_value='/unavailable/tfenv-wrapper') as lookup:
+                self.assertEqual(runner.terraform_executable(str(binary)), str(binary))
+                lookup.assert_not_called()
+            binary.chmod(0o600)
+            with self.assertRaises(runner.RunError):
+                runner.terraform_executable(str(binary))
+
+    def test_tfenv_launcher_resolves_native_binary_without_credentials(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            launcher = root / 'terraform'
+            launcher.write_text('#!/bin/bash\n# tfenv launcher\n')
+            launcher.chmod(0o700)
+            tfenv = root / 'tfenv'
+            tfenv.write_text('#!/bin/bash\n')
+            tfenv.chmod(0o700)
+            binary = root / 'versions/1.9.8/terraform'
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b'\x7fELFfixture')
+            binary.chmod(0o700)
+            output = subprocess.CompletedProcess([], 0, str(root) + '\n1.9.8\n', '')
+            with patch.dict(os.environ, {'AWS_PROFILE': 'powerful', 'CLOUDFLARE_API_KEY': 'secret', 'AWS_ACCESS_KEY_ID': 'secret', 'TFENV_TERRAFORM_VERSION': '1.9.8', 'TFENV_CONFIG_DIR': d}), patch.object(runner.subprocess, 'run', return_value=output) as command:
+                self.assertEqual(runner.terraform_executable(str(launcher)), str(binary))
+            env = command.call_args.kwargs['env']
+            for key in ('AWS_PROFILE', 'AWS_ACCESS_KEY_ID', 'CLOUDFLARE_API_KEY'):
+                self.assertNotIn(key, env)
+            self.assertEqual(env['TFENV_AUTO_INSTALL'], 'false')
+            self.assertEqual(env['TFENV_TERRAFORM_VERSION'], '1.9.8')
+            self.assertEqual(env['TFENV_CONFIG_DIR'], d)
+            self.assertEqual(command.call_args.kwargs['cwd'], runner.REPO)
+            self.assertEqual(command.call_args.args[0], [str(tfenv), 'hail-resolve'])
+            binary.unlink()
+            with patch.object(runner.subprocess, 'run', return_value=output), self.assertRaisesRegex(runner.RunError, 'not installed'):
+                runner.terraform_executable(str(launcher))
+
+    def test_tfenv_resolution_rejects_bad_versions_and_sanitizes_errors(self):
+        with tempfile.TemporaryDirectory() as d:
+            launcher = Path(d) / 'terraform'
+            for output in [subprocess.CompletedProcess([], 0, d + '\n../../outside\n', ''),
+                           subprocess.CompletedProcess([], 1, '', 'private diagnostic')]:
+                with patch.object(runner.shutil, 'which', return_value='/tools/tfenv'), patch.object(runner.subprocess, 'run', return_value=output):
+                    with self.assertRaises(runner.RunError) as error:
+                        runner.tfenv_executable(launcher)
+                    self.assertNotIn('private diagnostic', str(error.exception))
+
+    def test_terraform_preflight_uses_no_credentials_and_explains_launcher_failure(self):
+        instance = runner.Runner.__new__(runner.Runner)
+        with patch.object(instance, 'sandbox', side_effect=runner.RunError('private subprocess error')) as sandbox:
+            with self.assertRaisesRegex(runner.RunError, '--terraform-binary'):
+                instance.terraform_preflight()
+            self.assertEqual(sandbox.call_args.args[:2], (None, ['terraform', 'version', '-json']))
+            self.assertEqual(sandbox.call_args.kwargs['cwd'], '/hail')
+
     def test_token_alias_is_supported_but_conflicts_fail(self):
         self.assertEqual(runner.cloudflare_token({'CLOUDFLARE_API_KEY': 'bearer'}), 'bearer')
         self.assertEqual(runner.cloudflare_token({'CLOUDFLARE_API_TOKEN': 'bearer'}), 'bearer')
