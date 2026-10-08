@@ -42,6 +42,9 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run prettier
+      - run: npm run test:coverage
       - run: npm test
       - run: npm run test:package
       - name: Test the packed consumer artifact
@@ -125,3 +128,28 @@ jobs:
       - run: terraform -chdir=${{ matrix.directory }} init -backend=false -lockfile=readonly
       - run: terraform -chdir=${{ matrix.directory }} validate
       - run: terraform -chdir=${{ matrix.directory }} test
+
+  developer-setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: make deps
+      - run: make setup
+      - name: Check hooks and Terraform static analysis
+        shell: bash
+        run: |
+          source .dev-tools/activate
+          pre-commit run --all-files
+          tflint --chdir=terraform --recursive --config="$GITHUB_WORKSPACE/.tflint.hcl"
+          trivy config --exit-code 1 --severity HIGH,CRITICAL --ignorefile .trivyignore.yaml terraform
+          gitleaks git --redact --log-opts=-1

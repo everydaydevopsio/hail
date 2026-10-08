@@ -1,0 +1,38 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        language: system
+        entry: gitleaks git --pre-commit --redact --staged --verbose
+        stages: [pre-commit]
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint
+        entry: npm exec -- eslint
+        language: system
+        files: \.(ts|mjs|js)$
+        exclude: ^upstream/
+        stages: [pre-commit]
+      - id: prettier
+        name: Prettier
+        entry: npm exec -- prettier --check
+        language: system
+        files: \.(ts|mjs|js|json|yaml|yml)$
+        exclude: ^(upstream/|\.codex/|\.claude/)
+        stages: [pre-commit]
+      - id: terraform-fmt
+        name: Terraform formatting
+        entry: terraform fmt -check -recursive terraform
+        language: system
+        pass_filenames: false
+        files: ^terraform/.*\.tf$
+        stages: [pre-commit]
+      - id: local-validation
+        name: Build, typecheck, unit tests and packaged CLI smoke
+        entry: npm run test:prepush
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

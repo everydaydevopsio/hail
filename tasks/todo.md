@@ -1,18 +1,32 @@
-# Validation plan
+# Task: Ballast audit and rule compliance
 
-- [x] Identify PR #1 as open; branch from its head `0ad6d738727136dcd1c2e58fe0a3b217a6977c1b` and record main `a74e9d79123024f276e1cb6d5b38316fe54bc4db`.
-- [x] Review implementation, security, setup, workflows, and existing evidence. Maintain an evidence matrix.
-- [x] Run credential-free Node 22/24, Python, and Chromium baseline; record Terraform, Firefox, and WebKit blockers.
-- [x] Add reproducing tests, fix the deadline and package defects, and rerun affected suites.
-- [x] Build and inspect a clean packed consumer outside the repository, including two local browser workflows.
-- [x] Confirm authorized account `520473892387`, `us-east-1`, Cloudflare zone and unique subdomain, synthetic sender, isolated SES receiving region, and full receiver teardown.
-- [x] Implement external-role and permissions-boundary receiver mode; mock plan passed in CI.
-- [ ] Add declarative bootstrap IAM and tests on a new branch from merged main. Review trust, exact actions/resources, unsupported scopes, and cleanup before first AWS write.
-- [ ] Validate bootstrap policies with Access Analyzer and simulation; create only run-owned bootstrap IAM with `biokeytic`, then assert restricted identities per phase.
-- [ ] Generate and review a saved receiver plan under the provisioner, with the Cloudflare credential fetched by `marka` and isolated from reader/browser processes.
-- [ ] Provision only approved disposable resources; run real mail/browser, fault, permission, drift, and teardown checks.
-- [ ] Record final commit, package, roles, evidence, blockers, and cleanup state; PR #2 is open with Copilot review, and CI must rerun after credential fixes.
+## Context
+- Date: 2026-10-08
+- Mode: Autonomous; PR and merge authorized; Copilot excluded.
 
-## Decisions and risk
+## Scope
+- In scope: generated rules, evidence-backed config, development gates, audit report.
+- Out of scope: live email, provisioning, publishing, upstream snapshots.
 
-PRs #1 and #2 merged with green CI; the exact main commit before live bootstrap is `164674d231fda81fbf408cdb7e11958cc7f24937`. No live write occurs before the exact bootstrap plan is shown and checked. Terraform state, credentials, plans, message data, and private resource manifests stay outside Git. Rollback is run-owned Terraform destroy followed by scoped bootstrap cleanup after verifying ownership and dependencies. This run's Cloudflare DNS records are limited to `hail-20261005-202402.markcallen.dev` and its SES verification names. SES has no active receipt rule set at discovery; recheck immediately before apply and do not displace another set.
+## Acceptance Criteria
+- All retained rules have repository evidence and appropriate enforcement.
+- Clean ownership and generation audit; required tests and PR checks pass.
+
+## Execution Checklist
+- [x] Read all rules and establish initial audit evidence.
+- [x] Apply narrowed config and compliance fixes.
+- [x] Complete required local checks and final audit.
+- [x] Record local evidence and graduate the plan; PR Actions and merge are the remaining delivery steps.
+
+## Test Strategy
+- Run the existing unit/Python/browser/package and Terraform suites, plus new static gates.
+- No product behavior changes; new behavioral tests are unnecessary.
+
+## Rollback Strategy
+- Revert this PR; no deployed state changes.
+
+## Outcome
+- Historical checklist archived at tasks/archive/validation-plan.md; its old live work is superseded by docs/LIVE-EVIDENCE-20261008.md and is not authorization for another live run.
+
+- Result: 16 applicable rules per target; no drift; make deps/setup/check passed.
+- Evidence: [audit](../docs/RULES-AUDIT.md), [ADR 001](../adr/001-rules-and-development-setup.md).

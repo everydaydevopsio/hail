@@ -1,5 +1,7 @@
 # Hail
 
+[![CI](https://github.com/everydaydevopsio/hail/actions/workflows/ci.yml/badge.svg)](https://github.com/everydaydevopsio/hail/actions/workflows/ci.yml) [![License](https://img.shields.io/github/license/everydaydevopsio/hail)](LICENSE)
+
 **Send. Receive. Verify.**
 
 Playwright-native tests for magic-link logins, invitations, one-time codes, and application email delivery. Hail receives real email in your own AWS account, gives each test a unique address, and helps your browser test complete the workflow.
@@ -185,3 +187,11 @@ A hosted inbox viewer, local SMTP server, provider-specific delivery event adapt
 ## Provenance
 
 Hail evolves [ses-email-client](https://github.com/markcallen/ses-email-client) and [ses-receiving-terraform](https://github.com/markcallen/ses-receiving-terraform). Complete unchanged snapshots are retained under `upstream/`; their historical docs are not the supported Hail setup guide. See [the exact imported commits](docs/UPSTREAM.md).
+
+## Contributor checks
+
+Run `make deps`, then `make setup`. Source `.dev-tools/activate` or run `make shell`; run `make check` for local validation. Setup reports missing tools and directs you to `make deps`. See the [documentation index](docs/README.md) and [development checks](docs/DEVELOPMENT.md).
+
+## License
+
+ISC — see [LICENSE](LICENSE).

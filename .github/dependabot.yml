@@ -1,0 +1,31 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      aws-sdk:
+        patterns: ["@aws-sdk/*"]
+      typescript:
+        patterns: ["typescript", "tsx", "@types/*"]
+      dev-tooling:
+        patterns:
+          ["eslint", "@eslint/*", "typescript-eslint", "globals", "prettier"]
+        dependency-type: development
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+  - package-ecosystem: terraform
+    directories:
+      - /terraform/bootstrap
+      - /terraform/modules/receiver
+      - /terraform/examples/cloudflare
+      - /terraform/examples/route53
+      - /terraform/examples/manual
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10

@@ -1,0 +1,20 @@
+# Existing receiver design decisions; narrowly scoped, not global suppressions.
+misconfigurations:
+  - id: AVD-AWS-0095
+    paths:
+      - terraform/modules/receiver/main.tf
+      - modules/receiver/main.tf
+    statement: >-
+      SES publishes receipt metadata (not raw MIME) to this topic. Its resource
+      policy restricts the source account and SES receipt-rule ARN. Enabling a
+      customer KMS key needs a separately reviewed SES/KMS permission change.
+      SQS uses SSE and raw mail remains in the private encrypted S3 bucket.
+  - id: AVD-AWS-0132
+    paths:
+      - terraform/modules/receiver/main.tf
+      - modules/receiver/main.tf
+    statement: >-
+      This short-lived test mailbox deliberately uses S3-managed AES256 encryption.
+      A customer-managed KMS key is not part of the current receiver contract.
+      Bucket policy, public-access blocking, least-privilege roles, and bounded
+      retention protect raw authentication mail. See docs/SECURITY.md.
