@@ -26,6 +26,7 @@ import urllib.request
 
 REPO = Path(__file__).resolve().parents[2]
 ROLES = ('provisioner', 'reader', 'sender', 'indexer')
+MIN_FREE_BYTES = 4 * 1024 ** 3
 ROOTS = ('bootstrap', 'modules/receiver', 'examples/cloudflare', 'examples/route53', 'examples/manual')
 RECEIVER_TYPES = {'aws_ses_domain_identity_verification', 'cloudflare_dns_record', 'terraform_data',
     'aws_cloudwatch_log_group', 'aws_lambda_event_source_mapping', 'aws_lambda_function',
@@ -305,6 +306,7 @@ class Runner:
         require(sys.platform == 'linux', 'The full live runner requires Linux and Bubblewrap')
         (self.directory / 'logs').mkdir(exist_ok=True, mode=0o700)
         (self.directory / 'home').mkdir(exist_ok=True, mode=0o700)
+        (self.directory / 'provider-cache').mkdir(exist_ok=True, mode=0o700)
         self.sessions = Path(tempfile.mkdtemp(prefix='hail-sessions-'))
         self.manifest = json.loads((self.directory / 'manifest.json').read_text()) if cleanup else None
         if cleanup:
@@ -399,7 +401,7 @@ class Runner:
         mounts += ['--ro-bind', self.tools['terraform'], '/tools/terraform', '--bind', str(self.directory), '/hail',
                    '--ro-bind', str(REPO / 'scripts' / 'live'), '/tools/live', '--chdir', cwd, '--clearenv']
         env = clean_env('/hail/home', '/tools:/usr/local/bin:/usr/bin:/bin')
-        env.update(PLAYWRIGHT_BROWSERS_PATH='/hail/browsers', AWS_REGION=self.config['region'], AWS_DEFAULT_REGION=self.config['region'])
+        env.update(TF_PLUGIN_CACHE_DIR='/hail/provider-cache', PLAYWRIGHT_BROWSERS_PATH='/hail/browsers', AWS_REGION=self.config['region'], AWS_DEFAULT_REGION=self.config['region'])
         if role:
             mounts += ['--ro-bind', str(self.sessions / (role + '.json')), '/tmp/session.json']
             if live:
@@ -438,7 +440,9 @@ class Runner:
                 f.unlink()
 
     def bootstrap(self, label, args, source=True):
-        return self.command(label, [self.tools['terraform'], '-chdir=' + str(self.directory / 'bootstrap'), *args], env=self.source_env() if source else clean_env(self.directory / 'home'))
+        env = self.source_env() if source else clean_env(self.directory / 'home')
+        env['TF_PLUGIN_CACHE_DIR'] = str(self.directory / 'provider-cache')
+        return self.command(label, [self.tools['terraform'], '-chdir=' + str(self.directory / 'bootstrap'), *args], env=env)
 
     def terraform_preflight(self):
         try:
@@ -448,7 +452,14 @@ class Runner:
         except (RunError, subprocess.TimeoutExpired):
             raise RunError('Terraform cannot run inside the sandbox. Use --terraform-binary with a standalone executable, not an unsupported launcher; see the private terraform-preflight log') from None
 
+    def storage_preflight(self):
+        free = shutil.disk_usage(self.directory).free
+        self.summary['initialFreeSpaceMiB'] = free // (1024 ** 2)
+        self.save()
+        require(free >= MIN_FREE_BYTES, 'At least 4 GiB free space is required in the run directory; remove disposable caches from completed runs or choose --output-dir on a larger filesystem')
+
     def initialize(self):
+        self.storage_preflight()
         require(not subprocess.check_output([self.tools['git'], '-C', str(REPO), 'status', '--porcelain', '--untracked-files=no']).strip(), 'Commit tracked changes before running live so evidence names an exact revision')
         commit = subprocess.check_output([self.tools['git'], '-C', str(REPO), 'rev-parse', 'HEAD'], text=True).strip()
         run = 'hail-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%d') + '-' + secrets.token_hex(5)

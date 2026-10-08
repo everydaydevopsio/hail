@@ -167,6 +167,33 @@ class LiveRunnerTests(unittest.TestCase):
             self.assertEqual(sandbox.call_args.args[:2], (None, ['terraform', 'version', '-json']))
             self.assertEqual(sandbox.call_args.kwargs['cwd'], '/hail')
 
+    def test_low_disk_space_stops_before_snapshot_or_dependency_install(self):
+        instance = runner.Runner.__new__(runner.Runner)
+        instance.directory = Path('/private/run'); instance.summary = {}
+        usage = type('Usage', (), {'free': runner.MIN_FREE_BYTES - 1})()
+        with patch.object(runner.shutil, 'disk_usage', return_value=usage), patch.object(instance, 'save'), patch.object(instance, 'sandbox') as sandbox, patch.object(runner.subprocess, 'check_output') as git:
+            with self.assertRaisesRegex(runner.RunError, '4 GiB'):
+                instance.initialize()
+            sandbox.assert_not_called()
+            git.assert_not_called()
+        usage.free = runner.MIN_FREE_BYTES
+        with patch.object(runner.shutil, 'disk_usage', return_value=usage), patch.object(instance, 'save'):
+            instance.storage_preflight()
+        self.assertEqual(instance.summary['initialFreeSpaceMiB'], 4096)
+
+    def test_provider_cache_is_run_scoped_in_host_and_sandbox(self):
+        instance = runner.Runner.__new__(runner.Runner)
+        instance.directory = Path('/private/run'); instance.config = CONFIG
+        instance.tools = {'terraform': '/tools/terraform', 'bwrap': '/usr/bin/bwrap'}
+        with patch.object(instance, 'command', return_value=('', 0)) as command:
+            instance.bootstrap('init', ['init'], source=False)
+            self.assertEqual(command.call_args.kwargs['env']['TF_PLUGIN_CACHE_DIR'], '/private/run/provider-cache')
+            self.assertNotIn('AWS_PROFILE', command.call_args.kwargs['env'])
+            instance.sandbox(None, ['terraform', 'init'], 'init')
+            args = command.call_args.args[1]
+            index = args.index('TF_PLUGIN_CACHE_DIR')
+            self.assertEqual(args[index - 1:index + 2], ['--setenv', 'TF_PLUGIN_CACHE_DIR', '/hail/provider-cache'])
+
     def test_token_alias_is_supported_but_conflicts_fail(self):
         self.assertEqual(runner.cloudflare_token({'CLOUDFLARE_API_KEY': 'bearer'}), 'bearer')
         self.assertEqual(runner.cloudflare_token({'CLOUDFLARE_API_TOKEN': 'bearer'}), 'bearer')
