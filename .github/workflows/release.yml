@@ -63,7 +63,7 @@ jobs:
             fi
             git checkout --detach "refs/tags/$RETRY_TAG"
           fi
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
@@ -137,7 +137,7 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
