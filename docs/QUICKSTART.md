@@ -56,7 +56,9 @@ npx hail init \
   --region us-east-1 \
   --name myapp-hail \
   --existing-rule-set shared-inbound \
-  --out infra/hail
+  --out infra/hail \
+  --file hail-receiver.tf \
+  --local-modules
 ```
 
 Choose the appropriate alternative before running:
@@ -65,15 +67,15 @@ Choose the appropriate alternative before running:
 - **Manual DNS:** use `--dns manual` and omit `--zone-id`.
 - **No active SES receipt rule set:** replace `--existing-rule-set shared-inbound` with `--activate-new-rule-set` only when authorized to activate a new set. The CLI refuses to replace an active set.
 
-The initializer performs read-only preflight checks and creates Terraform files. It refuses an existing output directory or existing MX records; it does not apply infrastructure.
+The initializer performs read-only preflight checks and creates Terraform files. This source-checkout example uses `--local-modules` because the package version might not have a matching published Git tag. For a released package, omit that option: the generated receiver source is pinned to the matching `v<package version>` Git tag. `--out` can name a new or existing directory, and `--file` names the generated `.tf` file within it. Existing generated files and existing MX records are refused; infrastructure is not applied.
 
-In `infra/hail/main.tf`, replace the generated `source = "./modules/receiver"` inside `module "receiver"` with:
+For a reviewed Git commit instead of the copied local module, in `infra/hail/hail-receiver.tf` replace the generated `source = "./modules/receiver"` inside `module "receiver"` with:
 
 ```hcl
 source = "git::https://github.com/everydaydevopsio/hail.git//terraform/modules/receiver?ref=REVIEWED_COMMIT_SHA"
 ```
 
-Replace `REVIEWED_COMMIT_SHA` with the full SHA recorded in step 2. Keep the other generated module arguments and resources. The double slash selects the module directory within the GitHub repository. Terraform downloads the module and its bundled Lambda worker from that commit; the generated local module copy is no longer used.
+Replace `REVIEWED_COMMIT_SHA` with the full SHA recorded in step 2. Keep the other generated module arguments and resources. The double slash selects the module directory within the GitHub repository. Terraform downloads the module and its bundled Lambda worker from that commit; the generated local module copy is then unused. A released package's default tag pins the corresponding module without this edit.
 
 In `infra/hail/terraform.tfvars.json`, replace the empty reader list with your actual trusted principal, for example:
 

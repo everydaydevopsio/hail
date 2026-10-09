@@ -14,7 +14,7 @@ import { S3MailStore, awsCredentials } from "./store.js";
 import { scaffold, validateInit, type InitOptions } from "./setup.js";
 
 const execute = promisify(execFile);
-const help = `Hail: Send. Receive. Verify.\n\nCommands:\n  hail init --dns cloudflare|route53|manual --domain email-test.example.com\n    --zone-name example.com [--zone-id ID] --region us-east-1\n    (--existing-rule-set NAME | --activate-new-rule-set) [--out infra/hail]\n  hail configure --terraform-dir infra/hail [--out hail.config.json]\n  hail doctor [--config hail.config.json]\n\ninit only generates files after read-only checks; it never runs terraform apply.\nconfigure reads Terraform outputs; doctor never sends email.\n`;
+const help = `Hail: Send. Receive. Verify.\n\nCommands:\n  hail init --dns cloudflare|route53|manual --domain email-test.example.com\n    --zone-name example.com [--zone-id ID] --region us-east-1\n    (--existing-rule-set NAME | --activate-new-rule-set) [--out infra/hail] [--file main.tf] [--local-modules]\n  hail configure --terraform-dir infra/hail [--out hail.config.json]\n  hail doctor [--config hail.config.json]\n\ninit generates Terraform pinned to the installed Hail version unless --local-modules is set. It never runs terraform apply.\nconfigure reads Terraform outputs; doctor never sends email.\n`;
 
 async function activeRules(
   region: string,
@@ -158,6 +158,8 @@ async function main() {
       region: { type: "string" },
       name: { type: "string" },
       out: { type: "string" },
+      file: { type: "string" },
+      "local-modules": { type: "boolean" },
       "existing-rule-set": { type: "string" },
       "activate-new-rule-set": { type: "boolean" },
       "terraform-dir": { type: "string" },
@@ -173,6 +175,8 @@ async function main() {
       region: values.region ?? "us-east-1",
       name: values.name ?? "hail",
       out: values.out ?? "infra/hail",
+      file: values.file,
+      localModules: values["local-modules"],
       existingRuleSet: values["existing-rule-set"],
       activateNewRuleSet: values["activate-new-rule-set"],
     });
