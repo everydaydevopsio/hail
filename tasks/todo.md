@@ -1,4 +1,44 @@
-# Task: Castoff release notes
+# Task: npm-first quickstart
+
+## Context
+
+- Date: 2026-10-09
+- Mode: Documentation change requested by the user.
+- PRD Section: Acceptance criteria, DOC-01.
+
+## Scope
+
+- In scope: Published-package quickstart, existing-stack checks, state separation, post-apply verification.
+- Out of scope: CLI and Terraform module behavior; live cloud operations.
+
+## Acceptance Criteria
+
+- A new user can install a published package and generate the matching tagged module without switching to a source checkout.
+- The guide explains how to identify active SES rules and keep Hail state separate from an existing Terraform root.
+- The source-checkout alternative remains available.
+
+## Execution Checklist
+
+- [x] Check the published CLI and generated files against a real `v0.1.2` deployment.
+- [x] Update the quickstart and governing acceptance criterion.
+- [x] Verify commands, flags, links, and Markdown formatting.
+
+## Test Strategy
+
+- Documentation: compare commands and paths with Hail CLI help and generated output.
+- Formatting: run Prettier on changed Markdown files.
+
+## Rollback Strategy
+
+- Revert this documentation commit; no infrastructure is changed by the PR.
+
+## Outcome
+
+- The published-package path now leads the guide. Source installation is an explicit alternative. Preflight and state separation steps reflect the `hail.markcallen.dev` setup; no live operation was run from this branch.
+- Deferred CLI help, provider warning, and persistent-receiver smoke-test work to issues #24, #25, and #26.
+- Local checks passed: build, lint, Prettier, typecheck, 46 Node unit tests, 42 Python tests, package audit, coverage (97.43% lines), Terraform format, and 18 Chromium/Firefox browser cases. The nine WebKit cases could not launch because this host lacks GTK/GStreamer and related libraries; CI installs browser dependencies and is the full-browser gate.
+
+# Previous task: Castoff release notes
 
 ## Context
 - Date: 2026-10-09
