@@ -21,7 +21,7 @@ Provisioning and DNS changes below require your infrastructure owner's authoriza
 
 ## 2. Install Hail from source
 
-This checkout documents installation from source; do not assume an npm release exists.
+This section documents installation from a source checkout. Published versions are available as [`@everydaydevopsio/hail` on npm](https://www.npmjs.com/package/@everydaydevopsio/hail).
 
 ```bash
 git clone https://github.com/everydaydevopsio/hail.git
@@ -36,7 +36,7 @@ Record the full commit SHA printed above for the Terraform source in step 3. For
 In your application's repository:
 
 ```bash
-npm install --save-dev /absolute/path/to/hail/everydaydevopsio-hail-0.1.0.tgz @playwright/test
+npm install --save-dev /absolute/path/to/hail/everydaydevopsio-hail-0.1.1.tgz @playwright/test
 npx playwright install --with-deps chromium
 npx hail --help
 ```

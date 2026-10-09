@@ -42,7 +42,10 @@
 ## Outcome
 - `actionlint`, Prettier, typecheck, build, lint, 46 Node tests, 42 Python tests, package audit, coverage (97.43% lines), and all five Terraform validate/mock roots passed.
 - Browser suite: 18 Chromium/Firefox cases passed; nine WebKit cases could not launch because system libraries are absent. The workflow installs all three engines and their dependencies in CI.
-- npm owner authentication verified as `markcallen`. PR #22 is open; initial publication is still pending its CI, merge, and bootstrap dispatch.
+- npm owner authentication verified as `markcallen`. PR #22 merged after all CI jobs passed; merged-main CI passed. Bootstrap release run created `v0.1.1` at `17866c41ee2b0814db7b70bc1cd6ca38c5a51163` after its gates passed.
+- `@everydaydevopsio/hail@0.1.1` is public on npm with `latest` pointing to it. The registry tarball passed a published CLI `hail --help` smoke check. [GitHub Release v0.1.1](https://github.com/everydaydevopsio/hail/releases/tag/v0.1.1) exists. Initial publication used npm owner browser authentication and has no CI provenance.
+- GitHub `npm` environment is restricted to `main`. The npm owner configured trusted publishing; direct publish permission is under correction after the workflow test.
+- Trusted-publisher test run [37942699145](https://github.com/everydaydevopsio/hail/actions/runs/37942699145) passed all prepare gates and created `v0.1.2`, but npm rejected direct publish with `403 OIDC permission denied for this action`. Registry `latest` remains `0.1.1`. Owner is checking that the publisher's Allowed actions include direct `npm publish`; retry the existing tag after correction.
 
 # Previous task: Ballast audit and rule compliance
 

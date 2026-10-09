@@ -1,6 +1,6 @@
 # npm release workflow plan
 
-Status: Implemented, pending CI and operator setup  
+Status: First release published, trusted publisher permission correction pending
 Branch: `feature/dispatch-npm-release`  
 Created: 2026-10-09  
 Related ADRs: none
@@ -48,3 +48,4 @@ None for the workflow. npm trusted publisher and GitHub `npm` environment must b
 | 2026-10-09 | Plan created from Pilot's publish workflow and Hail's release rules. |
 | 2026-10-09 | Added npm repository metadata for trusted publishing and completed local checks. |
 | 2026-10-09 | Added a first-publication dispatch after confirming npm trust requires an existing package. |
+| 2026-10-09 | Published v0.1.1, verified registry artifact and CLI, and created the matching GitHub Release. |
