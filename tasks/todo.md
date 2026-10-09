@@ -1,4 +1,12 @@
-# Task: npm release workflow
+# Task: MIT license
+
+- [x] Replace the root license with the standard MIT text and retain the copyright holder.
+- [x] Align npm manifests, README, and contributor guidance with MIT.
+- [x] Run credential-free validation and verify the license metadata.
+- Rollback: revert this branch before merge; `upstream/` snapshots remain untouched.
+- Evidence: build, lint, format, typecheck, 46 Node tests, 42 Python tests, package audit, five Terraform validates, and five Terraform mock suites passed. Browser tests passed on Chromium and Firefox (18 cases); WebKit could not launch because this host lacks its system libraries.
+
+# Previous task: npm release workflow
 
 ## Context
 - Date: 2026-10-09

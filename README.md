@@ -196,4 +196,4 @@ Run `make deps`, then `make setup`. Source `.dev-tools/activate` or run `make sh
 
 ## License
 
-ISC — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
