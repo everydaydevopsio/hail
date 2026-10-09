@@ -15,33 +15,41 @@ You need:
 - An existing developer/CI IAM principal that will assume the receiver's reader role.
 - An application with a working email sender and a test environment that permits your test users.
 
-Use `us-east-1` for the example. Confirm the AWS account and region before proceeding. Only one SES receipt rule set can be active per region: identify the active set and inspect its rule ordering, including stop and bounce actions.
+Use `us-east-1` for the example. Confirm the AWS account and region before proceeding. Only one SES receipt rule set can be active per region: identify the active set and inspect its rule ordering, including stop and bounce actions. These read-only checks help establish what the initializer will attach to:
+
+```bash
+aws sts get-caller-identity
+aws ses describe-active-receipt-rule-set --region us-east-1
+dig +short MX email-test.example.com
+```
+
+An empty MX answer is expected for a fresh subdomain. An active rule set may contain rules for other domains; check that earlier rules will not stop or bounce mail for your test subdomain. If the SES command returns no active set, use `--activate-new-rule-set` in step 3 instead of `--existing-rule-set`. For Cloudflare, find the zone ID for the **existing** `example.com` zone; it is not a new zone or the subdomain's name.
 
 Provisioning and DNS changes below require your infrastructure owner's authorization. For precreated, restricted IAM roles, follow [IAM bootstrap](IAM-BOOTSTRAP.md) and the external-role guidance in [security](SECURITY.md#permissions-and-diagnostics).
 
-## 2. Install Hail from source
+## 2. Install the published package
 
-This section documents installation from a source checkout. Published versions are available as [`@everydaydevopsio/hail` on npm](https://www.npmjs.com/package/@everydaydevopsio/hail).
-
-```bash
-git clone https://github.com/everydaydevopsio/hail.git
-cd hail
-git rev-parse HEAD
-npm ci
-HAIL_TARBALL=$(npm pack --silent)
-```
-
-Record the full commit SHA printed above for the Terraform source in step 3. For reproducible setup, use a reviewed commit available on GitHub for both the package and module. `npm pack` builds the package and saves its tarball name in `HAIL_TARBALL` for the same shell.
-
-In your application's repository:
+In your application's repository, install a specific [published version](https://www.npmjs.com/package/@everydaydevopsio/hail) with Playwright:
 
 ```bash
-npm install --save-dev "/absolute/path/to/hail/$HAIL_TARBALL" @playwright/test
+npm install --save-dev @everydaydevopsio/hail@0.1.2 @playwright/test
 npx playwright install --with-deps chromium
 npx hail --help
 ```
 
-Use the actual source checkout path in the command above. Hail's entry points are ESM; the consumer project must use `"type": "module"` in `package.json`.
+Use the current version if it is newer, but pin the version you tested in your lockfile. The default `hail init` output selects the Git tag matching that installed version, such as `v0.1.2`; verify that tag exists before `terraform init`. Hail's entry points are ESM; the consumer project must use `"type": "module"` in `package.json`.
+
+For an unreleased checkout, pack the source and use `--local-modules` in step 3 instead:
+
+```bash
+git clone https://github.com/everydaydevopsio/hail.git
+cd hail
+npm ci
+npm pack
+# Install the printed tarball path in your application repository.
+```
+
+Use a reviewed source commit and do not assume an unreleased package version has a corresponding Git tag.
 
 ## 3. Generate Terraform and use the GitHub module
 
@@ -57,8 +65,7 @@ npx hail init \
   --name myapp-hail \
   --existing-rule-set shared-inbound \
   --out infra/hail \
-  --file hail-receiver.tf \
-  --local-modules
+  --file hail-receiver.tf
 ```
 
 Choose the appropriate alternative before running:
@@ -67,15 +74,15 @@ Choose the appropriate alternative before running:
 - **Manual DNS:** use `--dns manual` and omit `--zone-id`.
 - **No active SES receipt rule set:** replace `--existing-rule-set shared-inbound` with `--activate-new-rule-set` only when authorized to activate a new set. The CLI refuses to replace an active set.
 
-The initializer performs read-only preflight checks and creates Terraform files. This source-checkout example uses `--local-modules` because the package version might not have a matching published Git tag. For a released package, omit that option: the generated receiver source is pinned to the matching `v<package version>` Git tag. `--out` can name a new or existing directory, and `--file` names the generated `.tf` file within it. Existing generated files and existing MX records are refused; infrastructure is not applied.
+The initializer performs read-only preflight checks and creates Terraform files. With a released package, the generated receiver source is pinned to its matching `v<package version>` Git tag. `--out` can name a new or existing directory, and `--file` names the generated `.tf` file within it. Existing generated files and existing MX records are refused; infrastructure is not applied. For a source tarball without a matching tag, add `--local-modules` to copy the bundled receiver module.
 
-For a reviewed Git commit instead of the copied local module, in `infra/hail/hail-receiver.tf` replace the generated `source = "./modules/receiver"` inside `module "receiver"` with:
+For a reviewed Git commit instead of a release tag or copied local module, change the `source` inside `module "receiver"` in `infra/hail/hail-receiver.tf` to:
 
 ```hcl
 source = "git::https://github.com/everydaydevopsio/hail.git//terraform/modules/receiver?ref=REVIEWED_COMMIT_SHA"
 ```
 
-Replace `REVIEWED_COMMIT_SHA` with the full SHA recorded in step 2. Keep the other generated module arguments and resources. The double slash selects the module directory within the GitHub repository. Terraform downloads the module and its bundled Lambda worker from that commit; the generated local module copy is then unused. A released package's default tag pins the corresponding module without this edit.
+Replace `REVIEWED_COMMIT_SHA` with a full SHA available on GitHub. Keep the other generated module arguments and resources. The double slash selects the module directory within the GitHub repository. Terraform downloads the module and its bundled Lambda worker from that commit.
 
 In `infra/hail/terraform.tfvars.json`, replace the empty reader list with your actual trusted principal, for example:
 
@@ -87,7 +94,9 @@ In `infra/hail/terraform.tfvars.json`, replace the empty reader list with your a
 
 This is an excerpt, not a replacement for the whole JSON file. The module creates a reader role trusted by that principal and exports its ARN in `hail_config`. The caller also needs authorization to assume that role (`sts:AssumeRole`), subject to your account policies. Use a restricted test identity when running browser tests.
 
-Review resource names, the three-day default mail retention, IAM access, and an access-controlled Terraform state backend. Keep credentials out of Terraform variables and Git. Commit the provider lockfile; exclude state, plans, and credential/config files.
+Review resource names, the three-day default mail retention, and IAM access. The initializer creates a `.gitignore` for a new output directory but preserves one that already exists; confirm that `terraform.tfvars.json`, state, and plans are ignored. Preserve private variable values through your normal configuration process. Keep credentials out of Terraform variables and Git.
+
+If adding Hail beside an existing Terraform setup, use a separate root or confirm its provider constraints are compatible: the generated Cloudflare root requires Terraform 1.7+, AWS provider 5.50–6.x, and Cloudflare provider 5.x. Before `init`, configure an access-controlled state backend with a **distinct state key**. A separate root avoids accidentally reusing another stack's state. Commit the provider lockfile; exclude state, plans, and credential/config files.
 
 ## 4. Review and deploy
 
@@ -103,9 +112,10 @@ Review the saved plan and recheck DNS and active SES rules. Confirm that only th
 
 ```bash
 terraform -chdir=infra/hail apply hail.tfplan
+terraform -chdir=infra/hail plan -detailed-exitcode
 ```
 
-Cloudflare and Route53 configurations publish MX/TXT records and wait for SES verification. DNS propagation may take time.
+The final plan should report no changes (exit code 0). Cloudflare and Route53 configurations publish MX/TXT records and wait for SES verification. DNS propagation may take time.
 
 For **manual DNS**, apply does not wait for DNS. Run:
 
@@ -124,7 +134,7 @@ npx hail configure --terraform-dir infra/hail
 npx hail doctor
 ```
 
-Run `doctor` with the intended reader credentials. `configure` writes an owner-only `hail.config.json` containing receiver settings and the reader role ARN. It refuses to overwrite an existing file. Add `hail.config.json` to your application's `.gitignore`; the CLI does not update that root file. Run tests from this directory, or set `HAIL_CONFIG` to the configuration's absolute path.
+Run `doctor` with the intended reader credentials. `configure` reads the Terraform output and writes an owner-only `hail.config.json` containing receiver settings and the reader role ARN. It refuses to overwrite an existing file. Add `hail.config.json` to your application's `.gitignore`; the CLI does not update that root file. Run tests from this directory, or set `HAIL_CONFIG` to the configuration's absolute path. If the Terraform root is in another repository, use `configure --out /path/to/application/hail.config.json` and point `HAIL_CONFIG` there.
 
 `doctor` checks DNS, SES identity, the active matching receipt rule, and S3 listing access. It does not prove delivery, raw-message read access, full rule-order safety, or ingestion health.
 
@@ -170,7 +180,9 @@ test("sign in using a delivered magic link", async ({ page, inbox }) => {
     allowedOrigins: [origin],
   });
   await visitAuthLink(page, link);
-  await expect(page.getByTestId("current-user-email")).toHaveText(inbox.address);
+  await expect(page.getByTestId("current-user-email")).toHaveText(
+    inbox.address,
+  );
 });
 ```
 

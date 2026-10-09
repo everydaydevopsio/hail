@@ -6,6 +6,8 @@ Hail must be validated as an installable consumer package and, when a specifical
 
 ## Acceptance criteria
 
+- DOC-01: The quickstart leads with the published npm package and its matching tagged Terraform module, shows how to check the selected AWS account, active SES rules, DNS, reader trust, and state location, and keeps source-checkout installation as an explicit alternative.
+
 - INIT-01: `hail init` generates a receiver Terraform source pinned to the Git tag `v<installed Hail package version>` by default; an explicit local-module option copies and references the bundled module instead.
 - INIT-02: The caller can choose the output directory and Terraform `.tf` filename. Existing directories are usable when generated files do not conflict; initialization never overwrites an existing file.
 
