@@ -1,4 +1,36 @@
-# Task: npm-first quickstart
+# Task: compatible TypeScript dependency update
+
+## Context
+
+- Date: 2026-10-09
+- Mode: Autonomous; user requested repair of remaining Dependabot PRs.
+- Requirement: Keep the repository installable and its Node 22 minimum supported.
+
+## Acceptance Criteria
+
+- `npm ci` resolves without bypassing peer dependency checks.
+- Build, typecheck, lint, coverage, unit, Python, package, and browser gates pass.
+
+## Execution Checklist
+
+- [x] Replace TypeScript 7 with TypeScript 6, the newest major supported by `typescript-eslint` 8.
+- [x] Keep published Node types on the supported Node 22 baseline.
+- [x] Regenerate the npm lockfile and run local validation.
+
+## Test Strategy
+
+- The original Dependabot CI failure is the failing install case.
+- Re-run `npm ci`, quality gates, and Chromium/Firefox browser tests locally; require full PR CI after push.
+
+## Rollback Strategy
+
+- Revert this dependency PR if the fresh CI run fails or compatibility regresses.
+
+## Outcome
+
+- `npm ci`, build, typecheck, lint, Prettier, coverage (97.43% lines), 46 Node tests, 42 Python tests, package audit, and 18 Chromium/Firefox browser cases passed locally. Full three-browser and Terraform checks remain gated by PR CI.
+
+# Previous task: npm-first quickstart
 
 ## Context
 
