@@ -6,3 +6,5 @@ The completed rules audit and developer setup plan graduated to
 Current implementation plan: [versioned initializer module source](plan-init-module-source.md).
 
 Current implementation plan: [npm release workflow](plan-npm-release.md).
+
+Current implementation plan: [Castoff release notes](plan-castoff-release.md).

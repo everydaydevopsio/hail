@@ -34,6 +34,7 @@ jobs:
       contents: write
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
+      release_notes: ${{ steps.notes.outputs.release_notes }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -62,6 +63,17 @@ jobs:
               exit 1
             fi
             git checkout --detach "refs/tags/$RETRY_TAG"
+          fi
+      - name: Require OpenAI API key for a new release
+        if: inputs.retry_tag == ''
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${OPENAI_API_KEY//[[:space:]]/}" ]; then
+            echo "::error::OPENAI_API_KEY is unavailable; grant the secret to everydaydevopsio/hail before releasing"
+            exit 1
           fi
       - uses: actions/setup-node@v5
         with:
@@ -94,24 +106,49 @@ jobs:
             terraform -chdir="$directory" validate
             terraform -chdir="$directory" test
           done
+      - name: Select new version
+        if: inputs.retry_tag == ''
+        id: version
+        env:
+          RELEASE_TYPE: ${{ inputs.release_type }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --quiet
+          npm version "$RELEASE_TYPE" --no-git-tag-version
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Generate Castoff release notes
+        if: inputs.retry_tag == ''
+        id: notes
+        uses: everydaydevopsio/castoff/castoff@v2
+        env:
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+        with:
+          openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+          tag: ${{ steps.version.outputs.tag }}
+      - name: Update changelog
+        if: inputs.retry_tag == ''
+        uses: everydaydevopsio/castoff/changelog@v2
+        with:
+          version: ${{ steps.version.outputs.version }}
+          entry: ${{ steps.notes.outputs.changelog_entry }}
       - name: Create version commit and tag
         id: tag
         env:
-          RELEASE_TYPE: ${{ inputs.release_type }}
           RETRY_TAG: ${{ inputs.retry_tag }}
+          NEW_TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
           if [ -n "$RETRY_TAG" ]; then
             TAG="$RETRY_TAG"
           else
-            git diff --quiet
-            npm version "$RELEASE_TYPE" --no-git-tag-version
-            VERSION=$(node -p "require('./package.json').version")
-            TAG="v$VERSION"
+            TAG="$NEW_TAG"
             git config user.name 'github-actions[bot]'
             git config user.email 'github-actions[bot]@users.noreply.github.com'
-            git add package.json package-lock.json
+            git add package.json package-lock.json CHANGELOG.md
             git commit -m "chore: release $TAG"
             git tag "$TAG"
             git push --atomic origin HEAD:main "$TAG"
@@ -159,6 +196,17 @@ jobs:
             echo "::error::Tag, package.json, and package-lock.json versions differ"
             exit 1
           fi
+      - name: Require Castoff notes for a new release
+        env:
+          RETRY_TAG: ${{ inputs.retry_tag }}
+          NOTES: ${{ needs.prepare.outputs.release_notes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$RETRY_TAG" ] && [ -z "${NOTES//[[:space:]]/}" ]; then
+            echo "::error::Castoff notes are missing for a new release"
+            exit 1
+          fi
       - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run test:package
@@ -168,4 +216,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
-        run: gh release create "$TAG" --title "$TAG" --generate-notes
+          NOTES: ${{ needs.prepare.outputs.release_notes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${NOTES//[[:space:]]/}" ]; then
+            printf '%s\n' "$NOTES" > "$RUNNER_TEMP/release-notes.md"
+            gh release create "$TAG" --title "$TAG" --notes-file "$RUNNER_TEMP/release-notes.md"
+          else
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi
