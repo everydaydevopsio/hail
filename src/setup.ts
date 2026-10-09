@@ -1,4 +1,4 @@
-import { mkdir, cp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, cp, readFile, writeFile, lstat } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { normalizeDomain } from "./config.js";
@@ -11,10 +11,19 @@ export interface InitOptions {
   region: string;
   name: string;
   out: string;
+  file?: string;
+  localModules?: boolean;
   existingRuleSet?: string;
   activateNewRuleSet?: boolean;
 }
-export function validateInit(options: InitOptions): InitOptions {
+export function validateInit(
+  options: InitOptions,
+): InitOptions & { file: string } {
+  const file = options.file ?? "main.tf";
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\.tf$/.test(file))
+    throw new Error(
+      "Choose a Terraform file name ending in .tf, without a path.",
+    );
   if (!["cloudflare", "route53", "manual"].includes(options.dns))
     throw new Error("Choose cloudflare, route53, or manual DNS.");
   const domain = normalizeDomain(options.domain);
@@ -41,7 +50,7 @@ export function validateInit(options: InitOptions): InitOptions {
     throw new Error(
       "Choose exactly one: --existing-rule-set NAME or --activate-new-rule-set.",
     );
-  return { ...options, domain, zoneName };
+  return { ...options, domain, zoneName, file };
 }
 
 export async function scaffold(input: InitOptions): Promise<string> {
@@ -50,28 +59,55 @@ export async function scaffold(input: InitOptions): Promise<string> {
   const templates = fileURLToPath(new URL("../terraform/", import.meta.url));
   const parent = resolve(destination, "..");
   await mkdir(parent, { recursive: true });
-  // Exclusive directory creation: never replace an existing infrastructure tree.
-  await mkdir(destination);
+  await mkdir(destination, { recursive: true });
+  const targets = [options.file, "terraform.tfvars.json", "example.spec.ts"];
+  if (options.localModules) targets.push("modules");
+  for (const target of targets) {
+    try {
+      await lstat(join(destination, target));
+      throw Object.assign(new Error(`File already exists: ${target}`), {
+        code: "EEXIST",
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
   const template = await readFile(
     join(templates, "examples", options.dns, "main.tf"),
     "utf8",
   );
+  const packageVersion = options.localModules
+    ? undefined
+    : (
+        JSON.parse(
+          await readFile(
+            fileURLToPath(new URL("../package.json", import.meta.url)),
+            "utf8",
+          ),
+        ) as { version: string }
+      ).version;
+  const source = options.localModules
+    ? "./modules/receiver"
+    : `git::https://github.com/everydaydevopsio/hail.git//terraform/modules/receiver?ref=v${packageVersion}`;
   await writeFile(
-    join(destination, "main.tf"),
-    template.replace("../../modules/receiver", "./modules/receiver"),
+    join(destination, options.file),
+    template.replace("../../modules/receiver", source),
     { flag: "wx" },
   );
-  await cp(
-    join(templates, "modules", "receiver"),
-    join(destination, "modules", "receiver"),
-    {
-      recursive: true,
-      filter: (path) =>
-        !path.includes(".terraform") &&
-        !path.includes("__pycache__") &&
-        !path.endsWith(".zip"),
-    },
-  );
+  if (options.localModules)
+    await cp(
+      join(templates, "modules", "receiver"),
+      join(destination, "modules", "receiver"),
+      {
+        recursive: true,
+        force: false,
+        errorOnExist: true,
+        filter: (path) =>
+          !path.includes(".terraform") &&
+          !path.includes("__pycache__") &&
+          !path.endsWith(".zip"),
+      },
+    );
   const variables = {
     name: options.name,
     domain: options.domain,
@@ -92,11 +128,15 @@ export async function scaffold(input: InitOptions): Promise<string> {
     JSON.stringify(variables, null, 2) + "\n",
     { mode: 0o600, flag: "wx" },
   );
-  await writeFile(
-    join(destination, ".gitignore"),
-    ".terraform/\n*.tfstate*\n*.tfvars*\n*.tfplan\n**/lambda.zip\n",
-    { flag: "wx" },
-  );
+  try {
+    await writeFile(
+      join(destination, ".gitignore"),
+      ".terraform/\n*.tfstate*\n*.tfvars*\n*.tfplan\n**/lambda.zip\n",
+      { flag: "wx" },
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
   await writeFile(
     join(destination, "example.spec.ts"),
     `import { test, expect, visitAuthLink } from '@everydaydevopsio/hail/playwright';\n\ntest('magic-link login', async ({ page, inbox }) => {\n  test.setTimeout(90_000);\n  await page.goto('/login');\n  const after = await inbox.checkpoint();\n  await page.getByLabel('Email').fill(inbox.address);\n  await page.getByRole('button', { name: /send magic link/i }).click();\n  const email = await inbox.waitForEmail({ after, subject: /sign in/i });\n  const origin = new URL(page.url()).origin;\n  await visitAuthLink(page, email.getLink({ text: /sign in/i, allowedOrigins: [origin] }));\n  await expect(page.getByTestId('current-user-email')).toHaveText(inbox.address);\n});\n`,

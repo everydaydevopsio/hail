@@ -18,8 +18,27 @@ const run = (args: string[], options = {}) =>
 test("CLI help lists real commands and makes no network requests", async () => {
   const result = await run(["--help"]);
   assert.match(result.stdout, /hail init/);
+  assert.match(result.stdout, /--file main\.tf/);
+  assert.match(result.stdout, /--local-modules/);
   assert.match(result.stdout, /hail configure/);
   assert.match(result.stdout, /hail doctor/);
+});
+test("init rejects unsafe output filenames before contacting AWS", async () => {
+  await assert.rejects(
+    run([
+      "init",
+      "--dns",
+      "manual",
+      "--domain",
+      "mail.example.test",
+      "--zone-name",
+      "example.test",
+      "--activate-new-rule-set",
+      "--file",
+      "../escape.tf",
+    ]),
+    /without a path/,
+  );
 });
 test("CLI rejects unknown commands and missing configure directory", async () => {
   await assert.rejects(run(["does-not-exist"]));
