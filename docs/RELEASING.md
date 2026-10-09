@@ -2,6 +2,10 @@
 
 Hail releases `@everydaydevopsio/hail` through the manually dispatched [Release workflow](../.github/workflows/release.yml). No push to `main` or pull request publishes a package. The first package version is published by an npm organization owner from a workflow-created tag. Later versions use npm trusted publishing.
 
+The first release, [`v0.1.1`](https://github.com/everydaydevopsio/hail/releases/tag/v0.1.1), was published from tag commit `17866c41ee2b0814db7b70bc1cd6ca38c5a51163` on 2026-10-09. The bootstrap [release run](https://github.com/everydaydevopsio/hail/actions/runs/37893690737) passed its gates; the package audit found 28 files, and the public package's `hail --help` command passed. This is package publication evidence, not live email delivery evidence.
+
+The first trusted publication, [`v0.1.2`](https://github.com/everydaydevopsio/hail/releases/tag/v0.1.2), succeeded on a [retry of its existing tag](https://github.com/everydaydevopsio/hail/actions/runs/37944187301) after direct `npm publish` was enabled for the npm trusted publisher. npm lists `0.1.2` as `latest` with a SLSA provenance attestation. A fresh consumer install linked `hail` and its `--help` command passed. The package release does not establish live email delivery.
+
 ## First publication
 
 The package must exist on npm before [npm trust](https://docs.npmjs.com/cli/v11/commands/npm-trust/) can bind it to a GitHub workflow. Use this once for the initial version:
@@ -27,5 +31,7 @@ The version is incremented from `package.json`, so with the initial `0.1.0`, a p
 If validation or the atomic push fails, no package is published. Fix the failure on `main` and start a new dispatch.
 
 If the tag was pushed but npm publication failed, first check whether that version appeared on npm despite the workflow error. If it did not, repair the registry or trusted publisher setup, then dispatch from `main` with `retry_tag` set to that exact tag. The workflow validates the tag and its release commit, reruns the gates on tagged source, and attempts publication without another version bump. A retry tag must point to a release commit on `main` created by this workflow.
+
+For `403 OIDC permission denied for this action`, check the trusted publisher's **Allowed actions** on npmjs.com. The connection must allow direct `npm publish`; newly created connections can allow staged publishing only. Match the repository, `release.yml` filename, and `npm` environment exactly before retrying.
 
 If npm publication succeeded but GitHub Release creation failed, create the GitHub Release for the existing tag after checking the npm package. Do not dispatch a tagged retry: npm does not allow publishing the same version twice. If a published package has a defect, issue a corrected patch release; do not move or reuse its tag.

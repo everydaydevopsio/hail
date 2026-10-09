@@ -1,12 +1,12 @@
 # Hail
 
-[![CI](https://github.com/everydaydevopsio/hail/actions/workflows/ci.yml/badge.svg)](https://github.com/everydaydevopsio/hail/actions/workflows/ci.yml) [![Release](https://github.com/everydaydevopsio/hail/actions/workflows/release.yml/badge.svg)](https://github.com/everydaydevopsio/hail/actions/workflows/release.yml) [![GitHub Release](https://img.shields.io/github/v/release/everydaydevopsio/hail)](https://github.com/everydaydevopsio/hail/releases) [![License](https://img.shields.io/github/license/everydaydevopsio/hail)](LICENSE)
+[![CI](https://github.com/everydaydevopsio/hail/actions/workflows/ci.yml/badge.svg)](https://github.com/everydaydevopsio/hail/actions/workflows/ci.yml) [![Release](https://github.com/everydaydevopsio/hail/actions/workflows/release.yml/badge.svg)](https://github.com/everydaydevopsio/hail/actions/workflows/release.yml) [![GitHub Release](https://img.shields.io/github/v/release/everydaydevopsio/hail)](https://github.com/everydaydevopsio/hail/releases) [![npm](https://img.shields.io/npm/v/%40everydaydevopsio%2Fhail.svg)](https://www.npmjs.com/package/@everydaydevopsio/hail) [![License](https://img.shields.io/github/license/everydaydevopsio/hail)](LICENSE)
 
 **Send. Receive. Verify.**
 
 Playwright-native tests for magic-link logins, invitations, one-time codes, and application email delivery. Hail receives real email in your own AWS account, gives each test a unique address, and helps your browser test complete the workflow.
 
-**Status: release workflow available; live AWS delivery must be verified separately.** Check the [npm package](https://www.npmjs.com/package/@everydaydevopsio/hail) for published versions. The automated suite separates local browser proof from the opt-in live delivery gate.
+**Status: available on [npm](https://www.npmjs.com/package/@everydaydevopsio/hail); live AWS delivery must be verified separately.** The automated suite separates local browser proof from the opt-in live delivery gate.
 
 Maintainers can use the [manual npm release workflow](docs/RELEASING.md) after its registry trust and GitHub environment are configured. Adding the workflow alone does not publish a package.
 
@@ -50,9 +50,9 @@ Its JavaScript entry points are ESM; use an ESM consumer project (`"type": "modu
 
 ```bash
 npm ci
-npm pack
-# In your application repository, use the actual tarball path:
-npm install --save-dev /path/to/hail/everydaydevopsio-hail-0.1.0.tgz @playwright/test
+HAIL_TARBALL=$(npm pack --silent)
+# In your application repository, in the same shell:
+npm install --save-dev "/path/to/hail/$HAIL_TARBALL" @playwright/test
 npx hail --help
 ```
 
