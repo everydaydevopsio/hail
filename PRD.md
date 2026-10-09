@@ -26,6 +26,7 @@ Hail must be validated as an installable consumer package and, when a specifical
 - REL-04: A failed publish after tagging can be retried against the existing tag without another version bump. The operator guide explains trusted publisher setup, dispatch, failure recovery, and the distinction between package publication and live email verification.
 - REL-05: A first-publication dispatch validates and tags source but skips npm publication, allowing an npm organization owner to publish that exact tag with `npm publish --access public`. Once the package exists, the owner configures trusted publishing for later releases.
 - REL-06: Hail's root LICENSE, npm package metadata, and README identify MIT consistently; imported `upstream/` snapshots retain their original notices.
+- REL-07: A new manually dispatched release requires an available OpenAI API key, uses Castoff to generate release notes and a versioned changelog entry before tagging, and includes that changelog in the release commit. The GitHub Release uses Castoff notes. A retry of an already-created tag preserves the tagged source and can create release notes without rerunning Castoff.
 
 ## Safety constraints
 

@@ -1,4 +1,47 @@
-# Task: MIT license
+# Task: Castoff release notes
+
+## Context
+- Date: 2026-10-09
+- Mode: Autonomous; the user explicitly requested this release workflow change.
+- PRD Section: npm release channel, REL-07.
+
+## Scope
+- In scope: Castoff notes and changelog in the manually dispatched release workflow; release operations documentation.
+- Out of scope: dispatching a release, publishing npm, changing live AWS/DNS behavior.
+
+## Acceptance Criteria
+- A new release fails before tagging when the OpenAI key is unavailable or Castoff fails.
+- The release commit includes matching npm manifest versions and a Castoff changelog entry; GitHub Release uses the generated notes.
+- Tagged retries do not rewrite their tag or changelog and retain a release-note fallback.
+
+## Constraints
+- Preserve npm lockfile, credential-free PR CI, atomic release commit and tag push, and the existing retry flow.
+
+## Risks and Tradeoffs
+- Castoff adds an external API dependency to manual release dispatch; a failure must leave no release tag.
+- The key must be available to this repository as an Actions secret; the workflow cannot verify repository secret configuration locally.
+
+## Execution Checklist
+- [x] Add Castoff generation and changelog writing before the release commit and tag.
+- [x] Use Castoff notes for a new GitHub Release, with retry fallback.
+- [x] Document secret setup and retry behavior.
+- [x] Run workflow lint and repository validation gates.
+
+## Test Strategy
+- Static: actionlint and Prettier on the workflow.
+- Integration: manual release dispatch with a configured key is needed to prove Castoff API and GitHub Release behavior.
+- Failure paths: missing key and action failure stop before version commit/tag; retry skips Castoff.
+- Requirement mapping: REL-07.
+
+## Rollback Strategy
+- Before dispatch, revert this branch. After dispatch, preserve any published tag/package and correct with a later version.
+
+## Outcome
+- `actionlint`, Prettier, build, typecheck, lint, 46 Node tests, 42 Python tests, package audit, and all five Terraform validate/mock roots passed. Coverage: 97.43% lines, 87.97% branches, 96.77% functions.
+- Chromium and Firefox E2E: 18 passed. Full E2E was attempted; WebKit cannot launch on this host because system libraries are absent. The release workflow installs those dependencies in CI.
+- The Castoff API and GitHub Release path require a future authorized manual release dispatch and configured `OPENAI_API_KEY`. Secret presence could not be inspected with current GitHub permissions.
+
+# Previous task: MIT license
 
 - [x] Replace the root license with the standard MIT text and retain the copyright holder.
 - [x] Align npm manifests, README, and contributor guidance with MIT.
