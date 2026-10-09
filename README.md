@@ -50,9 +50,9 @@ Its JavaScript entry points are ESM; use an ESM consumer project (`"type": "modu
 
 ```bash
 npm ci
-npm pack
-# In your application repository, use the actual tarball path:
-npm install --save-dev /path/to/hail/everydaydevopsio-hail-0.1.1.tgz @playwright/test
+HAIL_TARBALL=$(npm pack --silent)
+# In your application repository, in the same shell:
+npm install --save-dev "/path/to/hail/$HAIL_TARBALL" @playwright/test
 npx hail --help
 ```
 

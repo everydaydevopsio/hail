@@ -1,6 +1,6 @@
 # npm release workflow plan
 
-Status: First release published, trusted publisher permission correction pending
+Status: Released and verified through npm trusted publishing
 Branch: `feature/dispatch-npm-release`  
 Created: 2026-10-09  
 Related ADRs: none

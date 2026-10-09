@@ -28,20 +28,20 @@ git clone https://github.com/everydaydevopsio/hail.git
 cd hail
 git rev-parse HEAD
 npm ci
-npm pack
+HAIL_TARBALL=$(npm pack --silent)
 ```
 
-Record the full commit SHA printed above for the Terraform source in step 3. For reproducible setup, use a reviewed commit available on GitHub for both the package and module. `npm pack` builds the package and prints its tarball name.
+Record the full commit SHA printed above for the Terraform source in step 3. For reproducible setup, use a reviewed commit available on GitHub for both the package and module. `npm pack` builds the package and saves its tarball name in `HAIL_TARBALL` for the same shell.
 
 In your application's repository:
 
 ```bash
-npm install --save-dev /absolute/path/to/hail/everydaydevopsio-hail-0.1.1.tgz @playwright/test
+npm install --save-dev "/absolute/path/to/hail/$HAIL_TARBALL" @playwright/test
 npx playwright install --with-deps chromium
 npx hail --help
 ```
 
-Use the actual tarball path/name printed by `npm pack`. Hail's entry points are ESM; the consumer project must use `"type": "module"` in `package.json`.
+Use the actual source checkout path in the command above. Hail's entry points are ESM; the consumer project must use `"type": "module"` in `package.json`.
 
 ## 3. Generate Terraform and use the GitHub module
 

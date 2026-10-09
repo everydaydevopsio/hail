@@ -44,8 +44,8 @@
 - Browser suite: 18 Chromium/Firefox cases passed; nine WebKit cases could not launch because system libraries are absent. The workflow installs all three engines and their dependencies in CI.
 - npm owner authentication verified as `markcallen`. PR #22 merged after all CI jobs passed; merged-main CI passed. Bootstrap release run created `v0.1.1` at `17866c41ee2b0814db7b70bc1cd6ca38c5a51163` after its gates passed.
 - `@everydaydevopsio/hail@0.1.1` is public on npm with `latest` pointing to it. The registry tarball passed a published CLI `hail --help` smoke check. [GitHub Release v0.1.1](https://github.com/everydaydevopsio/hail/releases/tag/v0.1.1) exists. Initial publication used npm owner browser authentication and has no CI provenance.
-- GitHub `npm` environment is restricted to `main`. The npm owner configured trusted publishing; direct publish permission is under correction after the workflow test.
-- Trusted-publisher test run [37942699145](https://github.com/everydaydevopsio/hail/actions/runs/37942699145) passed all prepare gates and created `v0.1.2`, but npm rejected direct publish with `403 OIDC permission denied for this action`. Registry `latest` remains `0.1.1`. Owner is checking that the publisher's Allowed actions include direct `npm publish`; retry the existing tag after correction.
+- GitHub `npm` environment is restricted to `main`. The npm owner enabled direct `npm publish` for the trusted publisher.
+- Trusted-publisher test run [37942699145](https://github.com/everydaydevopsio/hail/actions/runs/37942699145) passed all prepare gates and created `v0.1.2`, but npm rejected direct publish with `403 OIDC permission denied for this action`. After the owner enabled direct publishing, [retry run 37944187301](https://github.com/everydaydevopsio/hail/actions/runs/37944187301) passed and published the same tag with provenance. npm `latest` is `0.1.2`, a GitHub Release exists, and a fresh consumer install ran `hail --help` successfully.
 
 # Previous task: Ballast audit and rule compliance
 
