@@ -1,9 +1,9 @@
 {
   "name": "@everydaydevopsio/hail",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Playwright-native testing for real application email workflows",
   "type": "module",
-  "license": "ISC",
+  "license": "MIT",
   "engines": {
     "node": ">=22"
   },
@@ -61,7 +61,7 @@
     "@aws-sdk/credential-providers": "^3.700.0",
     "@types/node": "22.20.4",
     "cheerio": "^1.0.0",
-    "mailparser": "^3.7.0"
+    "mailparser": "^3.9.36"
   },
   "peerDependencies": {
     "@playwright/test": ">=1.55.0 <2"
@@ -72,13 +72,13 @@
     }
   },
   "devDependencies": {
-    "@aws-sdk/client-sts": "3.1142.0",
+    "@aws-sdk/client-sts": "3.1146.0",
     "@aws-sdk/types": "3.974.6",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.55.0",
     "@types/mailparser": "^3.4.6",
     "eslint": "^10.12.0",
-    "globals": "^16.5.0",
+    "globals": "^17.13.0",
     "prettier": "^3.6.2",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",

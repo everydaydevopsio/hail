@@ -6,6 +6,8 @@ Hail must be validated as an installable consumer package and, when a specifical
 
 ## Acceptance criteria
 
+- DOC-01: The quickstart leads with the published npm package and its matching tagged Terraform module, shows how to check the selected AWS account, active SES rules, DNS, reader trust, and state location, and keeps source-checkout installation as an explicit alternative.
+
 - INIT-01: `hail init` generates a receiver Terraform source pinned to the Git tag `v<installed Hail package version>` by default; an explicit local-module option copies and references the bundled module instead.
 - INIT-02: The caller can choose the output directory and Terraform `.tf` filename. Existing directories are usable when generated files do not conflict; initialization never overwrites an existing file.
 
@@ -25,6 +27,8 @@ Hail must be validated as an installable consumer package and, when a specifical
 - REL-03: After an initial authenticated bootstrap publication from a workflow-created tag, the tagged source publishes `@everydaydevopsio/hail` publicly to npm with provenance through npm trusted publishing, then creates a GitHub Release. Registry credentials are available only to the publishing job; ordinary PR CI remains read-only.
 - REL-04: A failed publish after tagging can be retried against the existing tag without another version bump. The operator guide explains trusted publisher setup, dispatch, failure recovery, and the distinction between package publication and live email verification.
 - REL-05: A first-publication dispatch validates and tags source but skips npm publication, allowing an npm organization owner to publish that exact tag with `npm publish --access public`. Once the package exists, the owner configures trusted publishing for later releases.
+- REL-06: Hail's root LICENSE, npm package metadata, and README identify MIT consistently; imported `upstream/` snapshots retain their original notices.
+- REL-07: A new manually dispatched release requires an available OpenAI API key, uses Castoff to generate release notes and a versioned changelog entry before tagging, and includes that changelog in the release commit. The GitHub Release uses Castoff notes. A retry of an already-created tag preserves the tagged source and can create release notes without rerunning Castoff.
 
 ## Safety constraints
 
