@@ -51,11 +51,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm pack --pack-destination "$RUNNER_TEMP"
+          npm pack --pack-destination "$RUNNER_TEMP" --json > "$RUNNER_TEMP/hail-pack.json"
+          TARBALL=$(node -p "require(process.argv[1])[0].filename" "$RUNNER_TEMP/hail-pack.json")
           mkdir "$RUNNER_TEMP/hail-consumer"
           cd "$RUNNER_TEMP/hail-consumer"
           npm init -y >/dev/null
-          npm install --ignore-scripts "$RUNNER_TEMP/everydaydevopsio-hail-0.1.0.tgz" @playwright/test@1.63.0 typescript@5.9.3
+          npm install --ignore-scripts "$RUNNER_TEMP/$TARBALL" @playwright/test@1.63.0 typescript@5.9.3
           cp "$GITHUB_WORKSPACE/tests/consumer/check.ts" ./check.ts
           npx tsc --noEmit --module NodeNext --moduleResolution NodeNext --target ESNext check.ts
           node --input-type=module -e "import {Hail} from '@everydaydevopsio/hail'; if (typeof Hail !== 'function') process.exit(1)"
@@ -94,10 +95,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm pack --pack-destination "$RUNNER_TEMP"
+          npm pack --pack-destination "$RUNNER_TEMP" --json > "$RUNNER_TEMP/hail-pack.json"
+          TARBALL=$(node -p "require(process.argv[1])[0].filename" "$RUNNER_TEMP/hail-pack.json")
           mkdir "$RUNNER_TEMP/hail-browser-consumer"
           cd "$RUNNER_TEMP/hail-browser-consumer"
-          npm install --ignore-scripts "$RUNNER_TEMP/everydaydevopsio-hail-0.1.0.tgz" @playwright/test@1.63.0
+          npm install --ignore-scripts "$RUNNER_TEMP/$TARBALL" @playwright/test@1.63.0
           npm pkg set type=module
           cp "$GITHUB_WORKSPACE/tests/consumer/workflows.spec.ts" ./workflows.spec.ts
           cp "$GITHUB_WORKSPACE/tests/consumer/playwright.config.ts" ./playwright.config.ts

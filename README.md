@@ -1,12 +1,14 @@
 # Hail
 
-[![CI](https://github.com/everydaydevopsio/hail/actions/workflows/ci.yml/badge.svg)](https://github.com/everydaydevopsio/hail/actions/workflows/ci.yml) [![License](https://img.shields.io/github/license/everydaydevopsio/hail)](LICENSE)
+[![CI](https://github.com/everydaydevopsio/hail/actions/workflows/ci.yml/badge.svg)](https://github.com/everydaydevopsio/hail/actions/workflows/ci.yml) [![Release](https://github.com/everydaydevopsio/hail/actions/workflows/release.yml/badge.svg)](https://github.com/everydaydevopsio/hail/actions/workflows/release.yml) [![GitHub Release](https://img.shields.io/github/v/release/everydaydevopsio/hail)](https://github.com/everydaydevopsio/hail/releases) [![License](https://img.shields.io/github/license/everydaydevopsio/hail)](LICENSE)
 
 **Send. Receive. Verify.**
 
 Playwright-native tests for magic-link logins, invitations, one-time codes, and application email delivery. Hail receives real email in your own AWS account, gives each test a unique address, and helps your browser test complete the workflow.
 
-**Status: initial integration, not an npm release or a verified live AWS deployment.** Use the checked-out source or a locally packed tarball. The automated suite separates local browser proof from the opt-in live delivery gate.
+**Status: release workflow available; live AWS delivery must be verified separately.** Check the [npm package](https://www.npmjs.com/package/@everydaydevopsio/hail) for published versions. The automated suite separates local browser proof from the opt-in live delivery gate.
+
+Maintainers can use the [manual npm release workflow](docs/RELEASING.md) after its registry trust and GitHub environment are configured. Adding the workflow alone does not publish a package.
 
 Start with the [AWS quickstart](docs/QUICKSTART.md) to deploy with Cloudflare and a GitHub-sourced Terraform module, then run your first email workflow test.
 
@@ -43,7 +45,7 @@ The browser tests use a loopback-only demo application and an in-memory MIME sto
 
 ## Install from this checkout
 
-The package is named `@everydaydevopsio/hail`, but has not been published by this change.
+The package is named `@everydaydevopsio/hail`. A checkout can be packed locally whether or not that version has been published.
 Its JavaScript entry points are ESM; use an ESM consumer project (`"type": "module"`) for Playwright TypeScript specs.
 
 ```bash
