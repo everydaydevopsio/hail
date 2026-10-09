@@ -1,6 +1,6 @@
 {
   "name": "@everydaydevopsio/hail",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Playwright-native testing for real application email workflows",
   "type": "module",
   "license": "ISC",
