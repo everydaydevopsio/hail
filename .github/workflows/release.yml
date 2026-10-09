@@ -36,7 +36,7 @@ jobs:
       tag: ${{ steps.tag.outputs.tag }}
       release_notes: ${{ steps.notes.outputs.release_notes }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Select release source
@@ -170,7 +170,7 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false

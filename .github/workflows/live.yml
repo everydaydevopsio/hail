@@ -28,7 +28,7 @@ jobs:
       HAIL_SENDER_SESSION_FILE: /tmp/hail-live-${{ github.run_id }}/sender.json
       HAIL_LIVE_RUN_DIR: /tmp/hail-live-${{ github.run_id }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-node@v5
