@@ -2,7 +2,7 @@
 
 ## Scope
 
-Hail must be validated as an installable consumer package and, when a specifically approved test domain and sender are available, as a real SES receiver used by browser workflows. Local, mocked, injected pipeline, and live results are reported separately. PRs #1 and #2 were merged after green CI at the operator's request. No package release or production infrastructure change is part of this work.
+Hail must be validated as an installable consumer package and, when a specifically approved test domain and sender are available, as a real SES receiver used by browser workflows. Local, mocked, injected pipeline, and live results are reported separately. PRs #1 and #2 were merged after green CI at the operator's request. The validation work did not publish a package or change production infrastructure.
 
 ## Acceptance criteria
 
@@ -17,6 +17,13 @@ Hail must be validated as an installable consumer package and, when a specifical
 - VAL-06: Approved live DNS/SES infrastructure is planned, applied, checked for drift, and used for real email plus browser workflows through the packed package.
 - VAL-07: Controlled pipeline faults, positive and negative permission checks, and disposable teardown are proven with run-owned resources.
 - VAL-08: A sanitized evidence matrix records each result as PASS, FAIL, or BLOCKED with exact role and commit. Follow-up bootstrap and live-validation changes receive a separate reviewable PR based on merged main.
+
+## npm release channel
+
+- REL-01: An operator can manually dispatch a patch, minor, or major release from `main`. The workflow updates both npm manifests, creates a matching `v`-prefixed semver tag, and pushes the release commit and tag together.
+- REL-02: Before publishing, the workflow runs credential-free build, quality, package, browser, Python, and Terraform mock gates. It rejects a non-main dispatch and a mismatched tag/package version.
+- REL-03: The tagged source publishes `@everydaydevopsio/hail` publicly to npm with provenance through npm trusted publishing, then creates a GitHub Release. Registry credentials are available only to the publishing job; ordinary PR CI remains read-only.
+- REL-04: A failed publish after tagging can be retried against the existing tag without another version bump. The operator guide explains trusted publisher setup, dispatch, failure recovery, and the distinction between package publication and live email verification.
 
 ## Safety constraints
 
