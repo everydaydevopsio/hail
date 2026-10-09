@@ -17,7 +17,7 @@ Hail is an email-workflow testing tool, not a sending provider or authentication
 - Use the existing npm lockfile and Node test runner; do not migrate package managers or test frameworks to satisfy generic examples.
 - The receiver is deployed as Lambda, not a resident TypeScript/browser application. Existing demo browser workflows are test fixtures; do not create a Docker smoke app or browser logging endpoint.
 - PR checks use Terraform mock tests, never credentialed plans. Live operations retain the explicit authorization requirements above.
-- Release/npm badges and publishing automation become applicable only when a release channel exists. Keep the ISC license.
+- Release/npm badges and publishing automation become applicable only when a release channel exists. Keep the MIT license.
 - Keep TF_LOG disabled in normal automation; transient debug output and plan files are sensitive and must stay out of ordinary reports.
 - See docs/RULES-AUDIT.md for the per-rule compliance evidence.
 

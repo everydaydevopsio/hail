@@ -28,7 +28,7 @@ jobs:
       HAIL_SENDER_SESSION_FILE: /tmp/hail-live-${{ github.run_id }}/sender.json
       HAIL_LIVE_RUN_DIR: /tmp/hail-live-${{ github.run_id }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-node@v5
@@ -40,7 +40,7 @@ jobs:
       - run: npx playwright install --with-deps chromium firefox webkit
       - run: mkdir -m 700 "$HAIL_LIVE_RUN_DIR"
       - name: Assume restricted reader using protected-environment OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.HAIL_READER_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
@@ -56,7 +56,7 @@ jobs:
           printf '%s' "$HAIL_CONFIG_JSON" | jq 'del(.roleArn)' > "$HAIL_CONFIG"
       - run: node dist/cli.js doctor
       - name: Assume restricted synthetic sender using protected-environment OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.HAIL_SENDER_ROLE_ARN }}
           aws-region: ${{ vars.HAIL_SEND_REGION || vars.AWS_REGION }}
