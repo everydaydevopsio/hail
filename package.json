@@ -3,7 +3,7 @@
   "version": "0.1.2",
   "description": "Playwright-native testing for real application email workflows",
   "type": "module",
-  "license": "ISC",
+  "license": "MIT",
   "engines": {
     "node": ">=22"
   },

@@ -25,6 +25,7 @@ Hail must be validated as an installable consumer package and, when a specifical
 - REL-03: After an initial authenticated bootstrap publication from a workflow-created tag, the tagged source publishes `@everydaydevopsio/hail` publicly to npm with provenance through npm trusted publishing, then creates a GitHub Release. Registry credentials are available only to the publishing job; ordinary PR CI remains read-only.
 - REL-04: A failed publish after tagging can be retried against the existing tag without another version bump. The operator guide explains trusted publisher setup, dispatch, failure recovery, and the distinction between package publication and live email verification.
 - REL-05: A first-publication dispatch validates and tags source but skips npm publication, allowing an npm organization owner to publish that exact tag with `npm publish --access public`. Once the package exists, the owner configures trusted publishing for later releases.
+- REL-06: Hail's root LICENSE, npm package metadata, and README identify MIT consistently; imported `upstream/` snapshots retain their original notices.
 
 ## Safety constraints
 
