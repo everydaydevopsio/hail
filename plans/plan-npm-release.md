@@ -11,7 +11,7 @@ Hail has a package and validation CI, but no release channel. Its CI also assume
 
 ## Approach
 
-Adapt Pilot's manual semver release, npm provenance, and GitHub Release flow. Use Hail's npm lockfile and gates. Restrict dispatch to `main`, publish from a matching workflow-created tag, and allow a tagged retry after a registry failure. Keep npm credentials confined to the publishing job via trusted publishing.
+Adapt Pilot's manual semver release, npm provenance, and GitHub Release flow. Use Hail's npm lockfile and gates. Restrict dispatch to `main`, publish from a matching workflow-created tag, and allow a tagged retry after a registry failure. The first package version is published by an authenticated npm owner from a workflow-created tag because npm requires an existing package before trusted publishing can be configured. Later releases keep registry credentials confined to the publishing job via trusted publishing.
 
 ## Files affected
 
@@ -47,3 +47,4 @@ None for the workflow. npm trusted publisher and GitHub `npm` environment must b
 | --- | --- |
 | 2026-10-09 | Plan created from Pilot's publish workflow and Hail's release rules. |
 | 2026-10-09 | Added npm repository metadata for trusted publishing and completed local checks. |
+| 2026-10-09 | Added a first-publication dispatch after confirming npm trust requires an existing package. |

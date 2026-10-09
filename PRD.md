@@ -22,8 +22,9 @@ Hail must be validated as an installable consumer package and, when a specifical
 
 - REL-01: An operator can manually dispatch a patch, minor, or major release from `main`. The workflow updates both npm manifests, creates a matching `v`-prefixed semver tag, and pushes the release commit and tag together.
 - REL-02: Before publishing, the workflow runs credential-free build, quality, package, browser, Python, and Terraform mock gates. It rejects a non-main dispatch and a mismatched tag/package version.
-- REL-03: The tagged source publishes `@everydaydevopsio/hail` publicly to npm with provenance through npm trusted publishing, then creates a GitHub Release. Registry credentials are available only to the publishing job; ordinary PR CI remains read-only.
+- REL-03: After an initial authenticated bootstrap publication from a workflow-created tag, the tagged source publishes `@everydaydevopsio/hail` publicly to npm with provenance through npm trusted publishing, then creates a GitHub Release. Registry credentials are available only to the publishing job; ordinary PR CI remains read-only.
 - REL-04: A failed publish after tagging can be retried against the existing tag without another version bump. The operator guide explains trusted publisher setup, dispatch, failure recovery, and the distinction between package publication and live email verification.
+- REL-05: A first-publication dispatch validates and tags source but skips npm publication, allowing an npm organization owner to publish that exact tag with `npm publish --access public`. Once the package exists, the owner configures trusted publishing for later releases.
 
 ## Safety constraints
 

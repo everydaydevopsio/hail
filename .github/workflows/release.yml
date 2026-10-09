@@ -12,6 +12,11 @@ on:
         description: Existing workflow-created v tag to retry after a failed publish (leave blank for a new release)
         required: false
         type: string
+      bootstrap_first_release:
+        description: Validate and create the first tag without publishing (for the first authenticated npm publication)
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -36,9 +41,14 @@ jobs:
       - name: Select release source
         env:
           RETRY_TAG: ${{ inputs.retry_tag }}
+          BOOTSTRAP_FIRST_RELEASE: ${{ inputs.bootstrap_first_release }}
         shell: bash
         run: |
           set -euo pipefail
+          if [ "$BOOTSTRAP_FIRST_RELEASE" = 'true' ] && [ -n "$RETRY_TAG" ]; then
+            echo "::error::First-release bootstrap cannot retry an existing tag"
+            exit 1
+          fi
           if [ -n "$RETRY_TAG" ]; then
             if [[ ! "$RETRY_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
               echo "::error::Retry tag must be a stable v-prefixed semver tag"
@@ -115,6 +125,7 @@ jobs:
 
   publish:
     needs: prepare
+    if: inputs.bootstrap_first_release != true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: npm

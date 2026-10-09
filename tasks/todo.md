@@ -2,7 +2,7 @@
 
 ## Context
 - Date: 2026-10-09
-- Mode: Autonomous implementation; dispatching a real publish still requires explicit authorization.
+- Mode: Explicit user authorization to publish the first npm package version.
 - PRD Section: npm release channel (REL-01 through REL-04).
 
 ## Scope
@@ -13,13 +13,14 @@
 - Manual patch/minor/major release starts only on main, validates source, pushes matching manifests and tag, publishes with provenance, and creates a GitHub Release.
 - Retry uses the existing tag and cannot bump again.
 - CI packed tests support any package version.
+- First-publication dispatch creates the tag without attempting unavailable npm trusted publishing; an npm organization owner publishes the tagged artifact.
 
 ## Constraints
 - Preserve npm lockfile, ISC license, credential-free PR CI, and `v`-tagged versions.
 
 ## Risks and Tradeoffs
 - Registry failure can leave a tag without a package; use the documented tagged retry.
-- The first dispatch requires npm trusted publisher and a GitHub release environment configured by the operator.
+- The first publish uses the authenticated npm owner; trusted publishing becomes available after the package exists.
 
 ## Execution Checklist
 - [x] Review Pilot and update PRD requirements.
@@ -41,7 +42,7 @@
 ## Outcome
 - `actionlint`, Prettier, typecheck, build, lint, 46 Node tests, 42 Python tests, package audit, coverage (97.43% lines), and all five Terraform validate/mock roots passed.
 - Browser suite: 18 Chromium/Firefox cases passed; nine WebKit cases could not launch because system libraries are absent. The workflow installs all three engines and their dependencies in CI.
-- npm publication and GitHub Release creation were not invoked. Operator must configure npm trusted publishing and the GitHub `npm` environment, then dispatch the workflow.
+- npm owner authentication verified as `markcallen`. PR #22 is open; initial publication is still pending its CI, merge, and bootstrap dispatch.
 
 # Previous task: Ballast audit and rule compliance
 
