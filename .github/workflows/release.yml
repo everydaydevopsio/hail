@@ -75,7 +75,7 @@ jobs:
             echo "::error::OPENAI_API_KEY is unavailable; grant the secret to everydaydevopsio/hail before releasing"
             exit 1
           fi
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
@@ -174,7 +174,7 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.tag }}
           persist-credentials: false
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
