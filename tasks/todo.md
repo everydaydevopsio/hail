@@ -9,13 +9,14 @@
 ## Checklist
 
 - [x] Fix the Bosun finding and run local checks.
-- [ ] Push branch, open PR, and request Copilot review.
-- [ ] Resolve CI and review feedback, then merge.
+- [x] Push branch, open PR, and request Copilot review.
+- [x] Resolve CI and review feedback; verify merge readiness.
 
 ## Review and local evidence
 
 - Bosun found one valid low issue in `src/cli.ts`: malformed smoke flags were reported as receiver failures. Added `SmokeValidationError` with fixed, safe messages naming `--from`, `--profile`, or `--timeout-ms` and CLI regression tests proving values are not echoed.
 - Build, typecheck, lint, Prettier, 52 Node tests, 42 Python tests, package audit, and coverage passed (91.62% lines). Earlier browser and Terraform checks remain valid for this CLI-only correction. PR CI will rerun its full credential-free gates.
+- PR [#31](https://github.com/everydaydevopsio/hail/pull/31) opened from `feat/issue-26-delivery-smoke`. All 11 Hail validation checks passed on [Actions run 38039861770](https://github.com/everydaydevopsio/hail/actions/runs/38039861770), including browser and five Terraform jobs; GitHub reported a clean, mergeable PR. Copilot was requested but returned a quota notice with no code comments. The quota and Bosun resolution were recorded in a PR comment.
 
 # Previous task: show verified synthetic email in smoke output
 
