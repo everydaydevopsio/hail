@@ -1,4 +1,24 @@
-# Task: issue #26 delivery smoke
+# Task: simplify issue #26 smoke invocation
+
+## Context and plan
+
+- Date: 2026-10-10. Mode: autonomous correction to the requested CLI; no cloud operation. PRD: SMOKE-01/02.
+- Replace mandatory role/account/session flags with the receiver config and normal AWS credential chain. Add optional `--profile`; derive SES region from receiver config. Preserve one send, bounded read, unique address, and safe output.
+- Tests: CLI help and missing sender; credential selection and reader role behavior with injected clients/providers; existing smoke matching and timeout tests. Run build, quality, unit/Python/browser/package/Terraform gates as required.
+- Risk: selected credentials must have `ses:SendRawEmail` and S3 read or `sts:AssumeRole` for configured reader role. Rollback: revert correction commit; no cloud state changed.
+
+## Checklist
+
+- [x] Update CLI, credential wiring, docs, and tests.
+- [x] Run local validation and record results.
+- [x] Commit correction.
+
+## Outcome
+
+- `hail smoke --from ADDRESS` now uses `hail.config.json`, its region and optional reader role, and the normal AWS credential chain. `--profile` selects a named source profile. The seven mandatory account/role/session flags and separate send-region flag are removed.
+- Build, typecheck, lint, Prettier, 51 Node tests, 42 Python tests, package audit, and coverage passed (92.74% lines). Earlier Chromium/Firefox and Terraform checks remain applicable because the correction changes only the smoke CLI and credential selection. WebKit still needs host libraries; no live send or DLQ check was run.
+
+# Previous task: issue #26 delivery smoke
 
 ## Context and plan
 

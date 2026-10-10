@@ -58,16 +58,11 @@ Invalid or missing options exit with a named option error. Run the relevant `hai
 Explicitly sends one synthetic message through SES to a fresh random address under the configured Hail domain. It checkpoints the inbox first, then checks the sender, recipient, subject, and unique body marker. It does not create Terraform resources or log in to an application.
 
 ```bash
-hail smoke --config hail.config.json \
-  --from verified-sender@example.com --send-region us-east-1 \
-  --account 123456789012 \
-  --reader-role-arn arn:aws:iam::123456789012:role/hail-reader \
-  --sender-role-arn arn:aws:iam::123456789012:role/hail-sender \
-  --reader-session-file /private/reader.json \
-  --sender-session-file /private/sender.json \
-  --timeout-ms 60000
+hail smoke --from verified-sender@example.com
+# Or select a named AWS profile:
+hail smoke --from verified-sender@example.com --profile hail-test
 ```
 
-The reader and sender files must be distinct, owned by the current user, mode 0600, and contain short-lived `accessKeyId`, `secretAccessKey`, `sessionToken`, and ISO `expiration` fields. Hail verifies each assumed role and the expected account with STS. The reader needs S3 list/get access to the receiver bucket; the sender needs `ses:SendRawEmail` for the verified identity and destination. The SES client makes one API attempt. The wait is bounded to 5–120 seconds (60 seconds by default), and at most five matching messages are inspected. The result never prints the inbox address, message body, raw MIME, or credentials.
+The command reads `hail.config.json` (or `HAIL_CONFIG` / `--config`) for the receiver domain, bucket, region, and optional reader role. It uses the normal AWS SDK credential chain by default. `--profile` selects a named AWS profile for sending and, when configured, assuming the reader role. The selected credentials need `ses:SendRawEmail` for the verified sender and test domain; they also need S3 list/get access or `sts:AssumeRole` for the configured reader role. The SES client makes one API attempt. `--timeout-ms` bounds the receipt wait to 5–120 seconds (60 seconds by default), and at most five matching messages are inspected. The result never prints the inbox address, message body, raw MIME, or credentials.
 
-The sender identity must be verified in the sending region. In the SES sandbox, the recipient domain must also be verified there; otherwise request production sending access. On timeout, inspect MX, receipt-rule ordering, pipeline health, and the ingestion DLQ with a separate diagnostics identity. A timeout alone cannot distinguish SMTP receipt failure from ingestion delay. Check that the DLQ remains empty after a successful live smoke run. `doctor` stays read-only; `test:live` exercises browser workflows, while `test:live:full` provisions a disposable receiver.
+The sender identity must be verified in the receiver's configured AWS region. In the SES sandbox, the recipient domain must also be verified there; otherwise request production sending access. On timeout, inspect MX, receipt-rule ordering, pipeline health, and the ingestion DLQ with a separate diagnostics identity. A timeout alone cannot distinguish SMTP receipt failure from ingestion delay. Check that the DLQ remains empty after a successful live smoke run. `doctor` stays read-only; `test:live` exercises browser workflows, while `test:live:full` provisions a disposable receiver.

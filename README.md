@@ -96,7 +96,7 @@ Manual DNS mode prints the required MX and TXT records with `terraform output dn
 
 `doctor` checks resolved MX, SES identity, the active domain/bucket receipt rule, and S3 listing access. It does **not** verify all preceding SES rules, queue health, raw-object read permissions, or actual delivery. Use the live test gate and check the DLQ before calling a deployment validated.
 
-For an already deployed receiver, [`hail smoke`](docs/CLI.md#hail-smoke) sends one synthetic message to a fresh test inbox with separate short-lived sender and reader credentials, waits up to a configured deadline, and checks its content. It is invoked explicitly and never runs in `doctor` or ordinary CI. Check the ingestion DLQ separately after a live run.
+For an already deployed receiver, [`hail smoke --from verified-sender@example.com`](docs/CLI.md#hail-smoke) sends one synthetic message to a fresh test inbox, waits up to a configured deadline, and checks its content. It uses your normal AWS credentials or `--profile`, and assumes the configured reader role when present. It is invoked explicitly and never runs in `doctor` or ordinary CI. Check the ingestion DLQ separately after a live run.
 
 ## Write a Playwright test
 

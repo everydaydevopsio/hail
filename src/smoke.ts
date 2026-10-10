@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
 import { SESClient, SendRawEmailCommand } from "@aws-sdk/client-ses";
 import { S3Client } from "@aws-sdk/client-s3";
-import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
-import type { AwsCredentialIdentity } from "@aws-sdk/types";
+import {
+  fromIni,
+  fromTemporaryCredentials,
+} from "@aws-sdk/credential-providers";
+import type { AwsCredentialIdentityProvider } from "@aws-sdk/types";
 import { Hail, EmailTimeoutError } from "./index.js";
 import { normalizeAddress, type HailConfig } from "./config.js";
 import { S3MailStore } from "./store.js";
@@ -56,130 +58,28 @@ export function smokeFailure(error: unknown): string {
   return "FAIL: smoke check failed; inspect restricted credentials and receiver health.";
 }
 
-interface RestrictedSession {
-  credentials: AwsCredentialIdentity;
-  roleId: string;
-  expiration: Date;
-}
+type CredentialProvider = AwsCredentialIdentityProvider;
 
-export function requireSessionLifetime(
-  expiration: Date,
-  neededMs: number,
-  now = Date.now(),
-): void {
-  if (
-    !Number.isFinite(expiration.getTime()) ||
-    expiration.getTime() < now + neededMs + 30_000
-  )
-    throw new Error("Restricted session expires before the smoke deadline.");
-}
-
-export function verifiedRoleId(
-  expectedRoleArn: string,
-  expectedAccount: string,
-  actualArn: string | undefined,
-  actualAccount: string | undefined,
-  userId: string | undefined,
-): string {
-  const expected =
-    /^arn:(aws(?:-us-gov|-cn)?):iam::(\d{12}):role\/(?:[A-Za-z0-9_+=,.@-]+\/)*([A-Za-z0-9_+=,.@-]+)$/.exec(
-      expectedRoleArn,
-    );
-  const actual =
-    /^arn:(aws(?:-us-gov|-cn)?):sts::(\d{12}):assumed-role\/([^/]+)\/[^/]+$/.exec(
-      actualArn ?? "",
-    );
-  const roleId = /^(AROA[A-Z0-9]+):[^:]+$/.exec(userId ?? "")?.[1];
-  if (
-    !expected ||
-    !actual ||
-    !roleId ||
-    expected[1] !== actual[1] ||
-    expected[2] !== expectedAccount ||
-    actual[2] !== expectedAccount ||
-    actualAccount !== expectedAccount ||
-    expected[3] !== actual[3]
-  )
-    throw new Error(
-      "Restricted session identity did not match the expected role and account.",
-    );
-  return roleId;
-}
-
-export function assertDistinctRoleIds(
-  readerRoleId: string,
-  senderRoleId: string,
-): void {
-  if (readerRoleId === senderRoleId)
-    throw new Error("Reader and sender sessions use the same AWS role.");
-}
-
-async function restrictedSession(
-  file: string,
-  expectedRoleArn: string,
-  expectedAccount: string,
-  region: string,
-  timeoutMs: number,
-): Promise<RestrictedSession> {
-  const info = await stat(file);
-  if (
-    !info.isFile() ||
-    (info.mode & 0o077) !== 0 ||
-    info.uid !== process.getuid?.()
-  )
-    throw new Error(
-      "Restricted session file must be owned by this user and mode 0600.",
-    );
-  const data = JSON.parse(await readFile(file, "utf8")) as Record<
-    string,
-    unknown
-  >;
-  const expiration =
-    typeof data.expiration === "string" ? Date.parse(data.expiration) : NaN;
-  if (
-    typeof data.accessKeyId !== "string" ||
-    typeof data.secretAccessKey !== "string" ||
-    typeof data.sessionToken !== "string" ||
-    !Number.isFinite(expiration)
-  )
-    throw new Error("Restricted session is missing or expires too soon.");
-  requireSessionLifetime(new Date(expiration), timeoutMs);
-  const credentials: AwsCredentialIdentity = {
-    accessKeyId: data.accessKeyId,
-    secretAccessKey: data.secretAccessKey,
-    sessionToken: data.sessionToken,
-    expiration: new Date(expiration),
-  };
-  const identity = await new STSClient({
-    region,
-    credentials,
-    maxAttempts: 1,
-  }).send(new GetCallerIdentityCommand({}), {
-    abortSignal: AbortSignal.timeout(10_000),
-  });
-  return {
-    credentials,
-    roleId: verifiedRoleId(
-      expectedRoleArn,
-      expectedAccount,
-      identity.Arn,
-      identity.Account,
-      identity.UserId,
-    ),
-    expiration: new Date(expiration),
-  };
+export function smokeCredentialSources<T>(
+  config: HailConfig,
+  profile: string | undefined,
+  providers: {
+    fromProfile: (profile: string) => T;
+    assumeReader: (roleArn: string, region: string, source: T | undefined) => T;
+  },
+): { sender: T | undefined; reader: T | undefined } {
+  const sender = profile ? providers.fromProfile(profile) : undefined;
+  const reader = config.roleArn
+    ? providers.assumeReader(config.roleArn, config.region, sender)
+    : sender;
+  return { sender, reader };
 }
 
 export interface SmokeOptions {
   config: HailConfig;
   from: string;
-  sendRegion: string;
   timeoutMs: number;
-  account: string;
-  readerRoleArn: string;
-  senderRoleArn: string;
-  readerSessionFile: string;
-  senderSessionFile: string;
+  profile?: string;
 }
 
 export async function smoke(options: SmokeOptions): Promise<string> {
@@ -189,43 +89,39 @@ export async function smoke(options: SmokeOptions): Promise<string> {
     options.timeoutMs > 120000
   )
     throw new Error("--timeout-ms must be an integer from 5000 to 120000.");
-  if (!/^[a-z]{2}(?:-gov)?-[a-z]+-\d+$/.test(options.sendRegion))
-    throw new Error("Invalid --send-region.");
-  if (options.readerRoleArn === options.senderRoleArn)
-    throw new Error("Reader and sender roles must be distinct.");
-  if (options.readerSessionFile === options.senderSessionFile)
-    throw new Error("Reader and sender session files must be distinct.");
+  if (
+    options.profile !== undefined &&
+    !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(options.profile)
+  )
+    throw new Error("Invalid --profile.");
   const from = normalizeAddress(options.from);
-  const reader = await restrictedSession(
-    options.readerSessionFile,
-    options.readerRoleArn,
-    options.account,
-    options.config.region,
-    options.timeoutMs,
+  const credentials = smokeCredentialSources<CredentialProvider>(
+    options.config,
+    options.profile,
+    {
+      fromProfile: (profile) => fromIni({ profile }),
+      assumeReader: (roleArn, region, source) =>
+        fromTemporaryCredentials({
+          clientConfig: { region },
+          masterCredentials: source,
+          params: { RoleArn: roleArn, RoleSessionName: "hail-smoke-reader" },
+        }),
+    },
   );
-  const sender = await restrictedSession(
-    options.senderSessionFile,
-    options.senderRoleArn,
-    options.account,
-    options.sendRegion,
-    options.timeoutMs,
-  );
-  assertDistinctRoleIds(reader.roleId, sender.roleId);
-  const directConfig = { ...options.config, roleArn: undefined };
   const hail = new Hail(
-    directConfig,
+    options.config,
     new S3MailStore(
-      directConfig,
+      options.config,
       new S3Client({
         region: options.config.region,
-        credentials: reader.credentials,
+        credentials: credentials.reader,
         maxAttempts: 2,
       }),
     ),
   );
   const ses = new SESClient({
-    region: options.sendRegion,
-    credentials: sender.credentials,
+    region: options.config.region,
+    credentials: credentials.sender,
     maxAttempts: 1,
   });
   try {
@@ -234,8 +130,6 @@ export async function smoke(options: SmokeOptions): Promise<string> {
       from,
       options.timeoutMs,
       async (to, subject, body) => {
-        requireSessionLifetime(reader.expiration, options.timeoutMs);
-        requireSessionLifetime(sender.expiration, 20_000);
         try {
           const raw = [
             `From: ${from}`,

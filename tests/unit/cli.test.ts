@@ -51,9 +51,10 @@ test("issue #24: subcommand help describes options without credentials or networ
     /--terraform-dir.*required/,
   );
   assert.match((await run(["doctor", "--help"])).stdout, /HAIL_CONFIG/);
-  assert.match(
+  assert.match((await run(["smoke", "--help"])).stdout, /--profile/);
+  assert.doesNotMatch(
     (await run(["smoke", "--help"])).stdout,
-    /--reader-session-file/,
+    /--reader-session-file|--account/,
   );
 });
 test("issue #24: invalid and missing options identify their flags", async () => {
@@ -65,13 +66,14 @@ test("issue #24: invalid and missing options identify their flags", async () => 
     ["init", "--domain", "mail.example.test", "--zone-name", "invalid"],
     ["configure"],
     ["doctor", "--bogus"],
+    ["smoke"],
     ["init", "--domain"],
   ]) {
     await assert.rejects(run(args), (error: Error & { stderr?: string }) => {
       assert.doesNotMatch(error.stderr ?? "", /Hail failed \(TypeError\)/);
       assert.match(
         error.stderr ?? "",
-        /--(?:domain|zone-name|dns|terraform-dir|bogus)/,
+        /--(?:domain|zone-name|dns|terraform-dir|bogus|from)/,
       );
       return true;
     });

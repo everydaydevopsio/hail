@@ -5,9 +5,7 @@ import { MemoryStore, config } from "../helpers/memory-store.js";
 import {
   runSmoke,
   smokeFailure,
-  verifiedRoleId,
-  requireSessionLifetime,
-  assertDistinctRoleIds,
+  smokeCredentialSources,
 } from "../../src/smoke.js";
 
 test("smoke uses a new in-domain recipient and matches sender, subject, and body", async () => {
@@ -74,47 +72,50 @@ test("smoke times out and diagnostics never include message content or credentia
   );
 });
 
-test("restricted identity checks ARN account and actual role IDs", () => {
-  const expected = "arn:aws:iam::123456789012:role/hail-reader";
-  const actual = "arn:aws:sts::123456789012:assumed-role/hail-reader/run";
-  assert.equal(
-    verifiedRoleId(
-      expected,
-      "123456789012",
-      actual,
-      "123456789012",
-      "AROA123:run",
+test("smoke uses selected profile and configured reader role without extra flags", () => {
+  const calls: string[] = [];
+  const providers = {
+    fromProfile: (profile: string) => {
+      calls.push(`profile:${profile}`);
+      return `source:${profile}`;
+    },
+    assumeReader: (
+      roleArn: string,
+      region: string,
+      source: string | undefined,
+    ) => {
+      calls.push(`assume:${roleArn}:${region}:${source}`);
+      return "reader";
+    },
+  };
+  assert.deepEqual(smokeCredentialSources(config, undefined, providers), {
+    sender: undefined,
+    reader: undefined,
+  });
+  assert.deepEqual(smokeCredentialSources(config, "hail-test", providers), {
+    sender: "source:hail-test",
+    reader: "source:hail-test",
+  });
+  assert.deepEqual(
+    smokeCredentialSources(
+      { ...config, roleArn: "arn:aws:iam::123456789012:role/hail-reader" },
+      "hail-test",
+      providers,
     ),
-    "AROA123",
+    { sender: "source:hail-test", reader: "reader" },
   );
-  assert.throws(() =>
-    verifiedRoleId(
-      "arn:aws:iam::999999999999:role/hail-reader",
-      "123456789012",
-      actual,
-      "123456789012",
-      "AROA123:run",
+  assert.deepEqual(
+    smokeCredentialSources(
+      { ...config, roleArn: "arn:aws:iam::123456789012:role/hail-reader" },
+      undefined,
+      providers,
     ),
+    { sender: undefined, reader: "reader" },
   );
-  assert.throws(() =>
-    verifiedRoleId(
-      expected,
-      "123456789012",
-      actual,
-      "123456789012",
-      "bad-user-id",
-    ),
-  );
-  assert.throws(() => assertDistinctRoleIds("AROA123", "AROA123"));
-  assert.doesNotThrow(() => assertDistinctRoleIds("AROA123", "AROA456"));
-});
-
-test("session lifetime is checked again after setup for the send and receipt wait", () => {
-  const now = Date.now();
-  assert.throws(() =>
-    requireSessionLifetime(new Date(now + 65_000), 60_000, now),
-  );
-  assert.doesNotThrow(() =>
-    requireSessionLifetime(new Date(now + 91_000), 60_000, now),
-  );
+  assert.deepEqual(calls, [
+    "profile:hail-test",
+    "profile:hail-test",
+    "assume:arn:aws:iam::123456789012:role/hail-reader:us-east-1:source:hail-test",
+    "assume:arn:aws:iam::123456789012:role/hail-reader:us-east-1:undefined",
+  ]);
 });

@@ -11,7 +11,7 @@ Local CI is necessary but insufficient. A release is not verified for email deli
 
 ## Run locally
 
-For a persistent, already deployed receiver, use the one-message [`hail smoke` command](CLI.md#hail-smoke) with separate restricted reader and sender session files. After it passes, check the receiver's ingestion DLQ with the diagnostics role and record an empty queue result. This command does not run the browser scenarios or create/destroy infrastructure. It requires separate explicit authorization to send real email.
+For a persistent, already deployed receiver, use the one-message [`hail smoke` command](CLI.md#hail-smoke) with the configured receiver and AWS credentials or a named profile. After it passes, check the receiver's ingestion DLQ with the diagnostics role and record an empty queue result. This command does not run the browser scenarios or create/destroy infrastructure. It requires separate explicit authorization to send real email.
 
 ```bash
 npm ci
