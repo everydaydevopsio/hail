@@ -2,6 +2,8 @@
 
 Record repeatable failure patterns and the test or gate that catches them here.
 
+- A catch that redacts AWS failures can also hide safe local validation errors. Use a typed validation error with fixed flag names, then test invalid CLI input through the built subprocess before shipping.
+
 - A persistent-receiver operator command should use `hail.config.json` and the normal AWS credential chain first. Require explicit role/session inputs only when the operation itself needs them; test the simple CLI example before documenting a multi-flag invocation.
 
 - A new SES operator command must use the action allowed by the existing restricted sender policy. The live role grants `ses:SendRawEmail`; review IAM scope before choosing the SES SDK command.

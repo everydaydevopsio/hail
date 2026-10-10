@@ -1,4 +1,23 @@
-# Task: show verified synthetic email in smoke output
+# Task: Bosun review and PR delivery for issue #26
+
+## Context and plan
+
+- Date: 2026-10-10. Mode: user authorized review, push, and merge after green Actions. PRD: SMOKE-01/02.
+- Bosun reviewed `0ac3791` against the default-branch merge base and found one valid low issue: malformed smoke flags are reported as generic receiver failures. Add typed, fixed validation messages and CLI regression tests, then run quality gates.
+- Push and open a PR with Copilot requested, monitor Actions and review comments, resolve material feedback, and merge only after green checks. Rollback is a revert of this feature branch; no cloud resources are changed by CI.
+
+## Checklist
+
+- [x] Fix the Bosun finding and run local checks.
+- [ ] Push branch, open PR, and request Copilot review.
+- [ ] Resolve CI and review feedback, then merge.
+
+## Review and local evidence
+
+- Bosun found one valid low issue in `src/cli.ts`: malformed smoke flags were reported as receiver failures. Added `SmokeValidationError` with fixed, safe messages naming `--from`, `--profile`, or `--timeout-ms` and CLI regression tests proving values are not echoed.
+- Build, typecheck, lint, Prettier, 52 Node tests, 42 Python tests, package audit, and coverage passed (91.62% lines). Earlier browser and Terraform checks remain valid for this CLI-only correction. PR CI will rerun its full credential-free gates.
+
+# Previous task: show verified synthetic email in smoke output
 
 ## Context and plan
 

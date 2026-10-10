@@ -17,6 +17,13 @@ const shortTexts = [
   "Hail is checking this inbox",
 ] as const;
 
+export class SmokeValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SmokeValidationError";
+  }
+}
+
 export async function runSmoke(
   hail: Hail,
   sender: string,
@@ -55,6 +62,8 @@ export async function runSmoke(
 }
 
 export function smokeFailure(error: unknown): string {
+  if (error instanceof SmokeValidationError)
+    return `FAIL: ${error.message} Run hail smoke --help.`;
   if (error instanceof EmailTimeoutError)
     return "FAIL: delivery or ingestion timed out; inspect DNS, SES receipt rules, and the ingestion DLQ.";
   const name = error instanceof Error ? error.name : "";
@@ -100,13 +109,24 @@ export async function smoke(options: SmokeOptions): Promise<string> {
     options.timeoutMs < 5000 ||
     options.timeoutMs > 120000
   )
-    throw new Error("--timeout-ms must be an integer from 5000 to 120000.");
+    throw new SmokeValidationError(
+      "--timeout-ms must be an integer from 5000 to 120000.",
+    );
   if (
     options.profile !== undefined &&
     !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(options.profile)
   )
-    throw new Error("Invalid --profile.");
-  const from = normalizeAddress(options.from);
+    throw new SmokeValidationError(
+      "--profile must be a valid AWS profile name.",
+    );
+  let from: string;
+  try {
+    from = normalizeAddress(options.from);
+  } catch {
+    throw new SmokeValidationError(
+      "--from must be a valid simple email address.",
+    );
+  }
   const credentials = smokeCredentialSources<CredentialProvider>(
     options.config,
     options.profile,

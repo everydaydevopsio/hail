@@ -101,6 +101,39 @@ test("CLI rejects unknown commands and missing configure directory", async () =>
   await assert.rejects(run(["toString", "--help"]));
   await assert.rejects(run(["configure"]));
 });
+test("smoke identifies invalid local flags without exposing their values", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "hail-smoke-cli-"));
+  try {
+    const configFile = join(parent, "hail.config.json");
+    await writeFile(configFile, JSON.stringify(config));
+    for (const [extra, flag, value] of [
+      [["--from", "bad address"], "--from", "bad address"],
+      [
+        ["--from", "sender@example.test", "--timeout-ms", "0"],
+        "--timeout-ms",
+        "0",
+      ],
+      [
+        ["--from", "sender@example.test", "--profile", "bad/profile"],
+        "--profile",
+        "bad/profile",
+      ],
+    ] as const) {
+      await assert.rejects(
+        run(["smoke", "--config", configFile, ...extra]),
+        (error: Error & { stderr?: string }) => {
+          assert.match(error.stderr ?? "", new RegExp(flag));
+          assert.match(error.stderr ?? "", /hail smoke --help/);
+          if (value !== "0")
+            assert.doesNotMatch(error.stderr ?? "", new RegExp(value));
+          return true;
+        },
+      );
+    }
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+  }
+});
 test("configure passes arguments without a shell and writes a protected allowlisted file", async () => {
   const parent = await mkdtemp(join(tmpdir(), "hail-cli-"));
   try {
