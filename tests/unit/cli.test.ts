@@ -22,9 +22,10 @@ test("CLI help lists real commands and makes no network requests", async () => {
   assert.match(result.stdout, /--local-modules/);
   assert.match(result.stdout, /hail configure/);
   assert.match(result.stdout, /hail doctor/);
+  assert.match(result.stdout, /hail smoke/);
 });
 test("issue #24: subcommand help describes options without credentials or network", async () => {
-  for (const command of ["init", "configure", "doctor"]) {
+  for (const command of ["init", "configure", "doctor", "smoke"]) {
     for (const flag of ["--help", "-h"]) {
       const { stdout, stderr } = await run([command, flag], {
         env: {
@@ -50,6 +51,11 @@ test("issue #24: subcommand help describes options without credentials or networ
     /--terraform-dir.*required/,
   );
   assert.match((await run(["doctor", "--help"])).stdout, /HAIL_CONFIG/);
+  assert.match((await run(["smoke", "--help"])).stdout, /--profile/);
+  assert.doesNotMatch(
+    (await run(["smoke", "--help"])).stdout,
+    /--reader-session-file|--account/,
+  );
 });
 test("issue #24: invalid and missing options identify their flags", async () => {
   for (const args of [
@@ -60,13 +66,14 @@ test("issue #24: invalid and missing options identify their flags", async () => 
     ["init", "--domain", "mail.example.test", "--zone-name", "invalid"],
     ["configure"],
     ["doctor", "--bogus"],
+    ["smoke"],
     ["init", "--domain"],
   ]) {
     await assert.rejects(run(args), (error: Error & { stderr?: string }) => {
       assert.doesNotMatch(error.stderr ?? "", /Hail failed \(TypeError\)/);
       assert.match(
         error.stderr ?? "",
-        /--(?:domain|zone-name|dns|terraform-dir|bogus)/,
+        /--(?:domain|zone-name|dns|terraform-dir|bogus|from)/,
       );
       return true;
     });
@@ -93,6 +100,39 @@ test("CLI rejects unknown commands and missing configure directory", async () =>
   await assert.rejects(run(["does-not-exist"]));
   await assert.rejects(run(["toString", "--help"]));
   await assert.rejects(run(["configure"]));
+});
+test("smoke identifies invalid local flags without exposing their values", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "hail-smoke-cli-"));
+  try {
+    const configFile = join(parent, "hail.config.json");
+    await writeFile(configFile, JSON.stringify(config));
+    for (const [extra, flag, value] of [
+      [["--from", "bad address"], "--from", "bad address"],
+      [
+        ["--from", "sender@example.test", "--timeout-ms", "0"],
+        "--timeout-ms",
+        "0",
+      ],
+      [
+        ["--from", "sender@example.test", "--profile", "bad/profile"],
+        "--profile",
+        "bad/profile",
+      ],
+    ] as const) {
+      await assert.rejects(
+        run(["smoke", "--config", configFile, ...extra]),
+        (error: Error & { stderr?: string }) => {
+          assert.match(error.stderr ?? "", new RegExp(flag));
+          assert.match(error.stderr ?? "", /hail smoke --help/);
+          if (value !== "0")
+            assert.doesNotMatch(error.stderr ?? "", new RegExp(value));
+          return true;
+        },
+      );
+    }
+  } finally {
+    await rm(parent, { recursive: true, force: true });
+  }
 });
 test("configure passes arguments without a shell and writes a protected allowlisted file", async () => {
   const parent = await mkdtemp(join(tmpdir(), "hail-cli-"));

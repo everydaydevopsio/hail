@@ -1,4 +1,86 @@
-# Task: issue #24 subcommand help
+# Task: Bosun review and PR delivery for issue #26
+
+## Context and plan
+
+- Date: 2026-10-10. Mode: user authorized review, push, and merge after green Actions. PRD: SMOKE-01/02.
+- Bosun reviewed `0ac3791` against the default-branch merge base and found one valid low issue: malformed smoke flags are reported as generic receiver failures. Add typed, fixed validation messages and CLI regression tests, then run quality gates.
+- Push and open a PR with Copilot requested, monitor Actions and review comments, resolve material feedback, and merge only after green checks. Rollback is a revert of this feature branch; no cloud resources are changed by CI.
+
+## Checklist
+
+- [x] Fix the Bosun finding and run local checks.
+- [x] Push branch, open PR, and request Copilot review.
+- [x] Resolve CI and review feedback; verify merge readiness.
+
+## Review and local evidence
+
+- Bosun found one valid low issue in `src/cli.ts`: malformed smoke flags were reported as receiver failures. Added `SmokeValidationError` with fixed, safe messages naming `--from`, `--profile`, or `--timeout-ms` and CLI regression tests proving values are not echoed.
+- Build, typecheck, lint, Prettier, 52 Node tests, 42 Python tests, package audit, and coverage passed (91.62% lines). Earlier browser and Terraform checks remain valid for this CLI-only correction. PR CI will rerun its full credential-free gates.
+- PR [#31](https://github.com/everydaydevopsio/hail/pull/31) opened from `feat/issue-26-delivery-smoke`. All 11 Hail validation checks passed on [Actions run 38039861770](https://github.com/everydaydevopsio/hail/actions/runs/38039861770), including browser and five Terraform jobs; GitHub reported a clean, mergeable PR. Copilot was requested but returned a quota notice with no code comments. The quota and Bosun resolution were recorded in a PR comment.
+
+# Previous task: show verified synthetic email in smoke output
+
+## Context and plan
+
+- Date: 2026-10-10. Mode: autonomous local output improvement. PRD: SMOKE-02.
+- Generate one short harmless text phrase plus the unique marker; display From, To, Subject, and Text only after the received mail passes exact matching. Failure output remains fixed and redacted.
+- Verify success details come from the confirmed received message, and mismatched mail never appears in output. Run local build, typecheck, unit, lint, formatting, package, and coverage checks. Rollback: revert this commit; no cloud operation.
+
+## Checklist
+
+- [x] Update output, docs, and tests.
+- [x] Run local checks and record results.
+- [x] Commit the change.
+
+## Outcome
+
+- Success now prints the exact synthetic From, recipient, subject, and short generated text from the matched received email. The generator chooses one of three harmless phrases and adds a unique reference marker. Wrong sender/body messages remain excluded; failure output remains redacted.
+- Build, typecheck, lint, Prettier, package audit, 51 Node tests, 42 Python tests, and coverage passed (92.83% lines). Browser and Terraform behavior is unchanged; prior branch checks apply. No new real email was sent.
+
+# Previous task: simplify issue #26 smoke invocation
+
+## Context and plan
+
+- Date: 2026-10-10. Mode: autonomous correction to the requested CLI; no cloud operation. PRD: SMOKE-01/02.
+- Replace mandatory role/account/session flags with the receiver config and normal AWS credential chain. Add optional `--profile`; derive SES region from receiver config. Preserve one send, bounded read, unique address, and safe output.
+- Tests: CLI help and missing sender; credential selection and reader role behavior with injected clients/providers; existing smoke matching and timeout tests. Run build, quality, unit/Python/browser/package/Terraform gates as required.
+- Risk: selected credentials must have `ses:SendRawEmail` and S3 read or `sts:AssumeRole` for configured reader role. Rollback: revert correction commit; no cloud state changed.
+
+## Checklist
+
+- [x] Update CLI, credential wiring, docs, and tests.
+- [x] Run local validation and record results.
+- [x] Commit correction.
+
+## Outcome
+
+- `hail smoke --from ADDRESS` now uses `hail.config.json`, its region and optional reader role, and the normal AWS credential chain. `--profile` selects a named source profile. The seven mandatory account/role/session flags and separate send-region flag are removed.
+- Build, typecheck, lint, Prettier, 51 Node tests, 42 Python tests, package audit, and coverage passed (92.74% lines). Earlier Chromium/Firefox and Terraform checks remain applicable because the correction changes only the smoke CLI and credential selection. WebKit still needs host libraries; no live send or DLQ check was run.
+
+# Previous task: issue #26 delivery smoke
+
+## Context and plan
+
+- Date: 2026-10-10. Mode: implementation authorized by user; live send requires separate explicit authorization. PRD: SMOKE-01/02.
+- Add a bounded CLI command using distinct restricted reader/sender sessions and one synthetic SES send. Keep the browser suites, doctor, and Terraform behavior unchanged.
+- Risk: SES and S3 permissions or routing may fail independently. Report only supported diagnoses. Rollback: revert the branch commit; no cloud state changes from implementation.
+
+## Checklist
+
+- [x] Write failing local tests for uniqueness, exact matching, timeout, and safe output.
+- [x] Implement CLI and documentation.
+- [x] Run build, typecheck, unit, Python, browser, Terraform validate/mock, coverage, then Bosun review.
+- [x] Record test outcomes and live verification gap.
+
+## Outcome
+
+- `hail smoke` uses separate STS-verified reader/sender sessions, one random inbox, one `SendRawEmail` API attempt, and a bounded wait for exact sender, subject, recipient, and body marker. Local tests cover uniqueness, mismatches, timeout, and safe error output.
+- Build, typecheck, lint, Prettier, 50 Node tests, 42 Python tests, package audit, and all five Terraform validate/mock roots passed. Coverage: 88.07% lines, 86.94% branches, 94.03% functions. Chromium and Firefox passed 9/9 each outside the sandbox; full WebKit requires missing host libraries. Terraform still reports the preexisting provider deprecation tracked in #25.
+- A real send/read and empty-DLQ check were not run because this task did not explicitly authorize sending real email. Live evidence remains required before claiming cloud delivery. Rollback is a revert of this branch commit; implementation changed no cloud state.
+- Bosun review of `149a1a1` against the default-branch fork point found two valid medium issues: caller-supplied ARN account was not checked against STS, and credential lifetime was checked too early. A follow-up commit validates the actual STS role IDs/account and rechecks lifetime immediately before sending; focused tests cover both failures.
+- After the Bosun fixes, build, typecheck, lint, Prettier, package audit, 52 Node tests, and coverage passed (88.05% lines, 86.59% branches, 94.29% functions). Browser, Python, and Terraform results above remain valid because the follow-up changes only the smoke credential checks and their local tests.
+
+# Previous task: issue #24 subcommand help
 
 ## Context
 

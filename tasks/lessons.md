@@ -2,6 +2,14 @@
 
 Record repeatable failure patterns and the test or gate that catches them here.
 
+- A catch that redacts AWS failures can also hide safe local validation errors. Use a typed validation error with fixed flag names, then test invalid CLI input through the built subprocess before shipping.
+
+- A persistent-receiver operator command should use `hail.config.json` and the normal AWS credential chain first. Require explicit role/session inputs only when the operation itself needs them; test the simple CLI example before documenting a multi-flag invocation.
+
+- A new SES operator command must use the action allowed by the existing restricted sender policy. The live role grants `ses:SendRawEmail`; review IAM scope before choosing the SES SDK command.
+- Node subprocess coverage and browser startup can fail under the command sandbox while ordinary unit tests pass. Re-run the exact affected gate outside the sandbox after an `EPERM` or browser sandbox error, and report missing host browser libraries separately.
+- An expected IAM role ARN is caller-supplied evidence. Validate its account and role name against STS, and compare actual STS role IDs when enforcing reader/sender separation. Recheck credential expiration after setup work so the advertised wait remains available.
+
 - Replacing top-level CLI help while adding subcommand help can silently remove existing usage details. Keep the top-level help regression test and check it alongside each new command help path.
 
 - A grouped major dependency bump can select a compiler newer than its lint parser supports. Dependabot's TypeScript 7 update failed `npm ci` because `typescript-eslint` 8 accepts TypeScript below 6.1. Keep compiler updates within the parser's peer range and use the repository's minimum Node major for published `@types/node` declarations.
