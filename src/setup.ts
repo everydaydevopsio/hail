@@ -22,12 +22,26 @@ export function validateInit(
   const file = options.file ?? "main.tf";
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\.tf$/.test(file))
     throw new Error(
-      "Choose a Terraform file name ending in .tf, without a path.",
+      "--file must be a Terraform file name ending in .tf, without a path.",
     );
   if (!["cloudflare", "route53", "manual"].includes(options.dns))
-    throw new Error("Choose cloudflare, route53, or manual DNS.");
-  const domain = normalizeDomain(options.domain);
-  const zoneName = normalizeDomain(options.zoneName);
+    throw new Error("--dns must be cloudflare, route53, or manual.");
+  let domain: string;
+  let zoneName: string;
+  try {
+    domain = normalizeDomain(options.domain);
+  } catch (error) {
+    throw new Error("--domain must be a valid ASCII DNS domain.", {
+      cause: error,
+    });
+  }
+  try {
+    zoneName = normalizeDomain(options.zoneName);
+  } catch (error) {
+    throw new Error("--zone-name must be a valid ASCII DNS domain.", {
+      cause: error,
+    });
+  }
   if (domain === zoneName || !domain.endsWith(`.${zoneName}`))
     throw new Error(
       "Use a dedicated subdomain inside the selected DNS zone, not its apex.",
@@ -35,7 +49,7 @@ export function validateInit(
   if (options.dns !== "manual" && !options.zoneId)
     throw new Error("Managed DNS requires --zone-id.");
   if (!/^[a-z][a-z0-9-]{2,31}$/.test(options.name))
-    throw new Error("Resource name must be 3-32 lowercase characters.");
+    throw new Error("--name must be 3-32 lowercase characters.");
   if (
     ![
       "us-east-1",
@@ -45,7 +59,9 @@ export function validateInit(
       "eu-west-1",
     ].includes(options.region)
   )
-    throw new Error("Choose a receiving region supported by this release.");
+    throw new Error(
+      "--region must be a receiving region supported by this release.",
+    );
   if (Boolean(options.existingRuleSet) === Boolean(options.activateNewRuleSet))
     throw new Error(
       "Choose exactly one: --existing-rule-set NAME or --activate-new-rule-set.",

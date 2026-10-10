@@ -35,6 +35,7 @@ In your application's repository, install a specific [published version](https:/
 npm install --save-dev @everydaydevopsio/hail@0.1.2 @playwright/test
 npx playwright install --with-deps chromium
 npx hail --help
+npx hail init --help
 ```
 
 Use the current version if it is newer, but pin the version you tested in your lockfile. The default `hail init` output selects the Git tag matching that installed version, such as `v0.1.2`; verify that tag exists before `terraform init`. Hail's entry points are ESM; the consumer project must use `"type": "module"` in `package.json`.
@@ -73,6 +74,8 @@ Choose the appropriate alternative before running:
 - **Route53:** replace `--dns cloudflare` with `--dns route53` and supply an existing public hosted zone ID.
 - **Manual DNS:** use `--dns manual` and omit `--zone-id`.
 - **No active SES receipt rule set:** replace `--existing-rule-set shared-inbound` with `--activate-new-rule-set` only when authorized to activate a new set. The CLI refuses to replace an active set.
+
+For every command's flags and defaults, see the [CLI reference](CLI.md). You can also run `npx hail init --help`, `npx hail configure --help`, or `npx hail doctor --help` without credentials.
 
 The initializer performs read-only preflight checks and creates Terraform files. With a released package, the generated receiver source is pinned to its matching `v<package version>` Git tag. `--out` can name a new or existing directory, and `--file` names the generated `.tf` file within it. Existing generated files and existing MX records are refused; infrastructure is not applied. For a source tarball without a matching tag, add `--local-modules` to copy the bundled receiver module.
 

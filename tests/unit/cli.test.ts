@@ -23,6 +23,55 @@ test("CLI help lists real commands and makes no network requests", async () => {
   assert.match(result.stdout, /hail configure/);
   assert.match(result.stdout, /hail doctor/);
 });
+test("issue #24: subcommand help describes options without credentials or network", async () => {
+  for (const command of ["init", "configure", "doctor"]) {
+    for (const flag of ["--help", "-h"]) {
+      const { stdout, stderr } = await run([command, flag], {
+        env: {
+          ...process.env,
+          AWS_ACCESS_KEY_ID: "",
+          AWS_SECRET_ACCESS_KEY: "",
+          AWS_EC2_METADATA_DISABLED: "true",
+          HAIL_CONFIG: "/does-not-exist",
+        },
+      });
+      assert.equal(stderr, "");
+      assert.match(stdout, new RegExp(`hail ${command}`));
+      assert.match(stdout, /Example:/);
+    }
+  }
+  const init = (await run(["init", "--help"])).stdout;
+  assert.match(init, /--domain.*required/);
+  assert.match(init, /--zone-name.*required/);
+  assert.match(init, /--existing-rule-set.*--activate-new-rule-set/s);
+  assert.match(init, /--region.*us-east-1/);
+  assert.match(
+    (await run(["configure", "--help"])).stdout,
+    /--terraform-dir.*required/,
+  );
+  assert.match((await run(["doctor", "--help"])).stdout, /HAIL_CONFIG/);
+});
+test("issue #24: invalid and missing options identify their flags", async () => {
+  for (const args of [
+    ["init"],
+    ["init", "--domain", "mail.example.test"],
+    ["init", "--dns", "unknown"],
+    ["init", "--domain", "invalid", "--zone-name", "example.test"],
+    ["init", "--domain", "mail.example.test", "--zone-name", "invalid"],
+    ["configure"],
+    ["doctor", "--bogus"],
+    ["init", "--domain"],
+  ]) {
+    await assert.rejects(run(args), (error: Error & { stderr?: string }) => {
+      assert.doesNotMatch(error.stderr ?? "", /Hail failed \(TypeError\)/);
+      assert.match(
+        error.stderr ?? "",
+        /--(?:domain|zone-name|dns|terraform-dir|bogus)/,
+      );
+      return true;
+    });
+  }
+});
 test("init rejects unsafe output filenames before contacting AWS", async () => {
   await assert.rejects(
     run([
@@ -42,6 +91,7 @@ test("init rejects unsafe output filenames before contacting AWS", async () => {
 });
 test("CLI rejects unknown commands and missing configure directory", async () => {
   await assert.rejects(run(["does-not-exist"]));
+  await assert.rejects(run(["toString", "--help"]));
   await assert.rejects(run(["configure"]));
 });
 test("configure passes arguments without a shell and writes a protected allowlisted file", async () => {

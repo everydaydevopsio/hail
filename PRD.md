@@ -10,6 +10,7 @@ Hail must be validated as an installable consumer package and, when a specifical
 
 - INIT-01: `hail init` generates a receiver Terraform source pinned to the Git tag `v<installed Hail package version>` by default; an explicit local-module option copies and references the bundled module instead.
 - INIT-02: The caller can choose the output directory and Terraform `.tf` filename. Existing directories are usable when generated files do not conflict; initialization never overwrites an existing file.
+- CLI-01: `hail init --help`, `hail configure --help`, and `hail doctor --help` (also `-h`) print command-specific options, required choices, defaults, and a usable example, then exit successfully without credentials or network access. Top-level help remains available. Missing or invalid CLI options identify the relevant flag and point to command help.
 
 - VAL-01: The exact stacked base and tested commit are recorded; upstream snapshots remain unchanged.
 - VAL-02: Credential-free build, type, unit, Python, browser, Terraform, and packed-consumer tests cover supported runtimes, DNS templates, and browser engines.
