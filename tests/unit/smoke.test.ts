@@ -13,6 +13,7 @@ test("smoke uses a new in-domain recipient and matches sender, subject, and body
   const hail = new Hail(config, store);
   const addresses = new Set<string>();
   for (let i = 0; i < 2; i++) {
+    let expectedResult = "";
     const result = await runSmoke(
       hail,
       "sender@example.test",
@@ -20,7 +21,18 @@ test("smoke uses a new in-domain recipient and matches sender, subject, and body
       async (to, subject, body) => {
         assert.match(to, /^smoke-[a-f0-9]{32}@mail\.example\.test$/);
         assert.match(subject, /^Hail smoke [a-f0-9-]+$/);
-        assert.match(body, /^Synthetic Hail delivery check: [a-f0-9-]+$/);
+        assert.match(
+          body,
+          /^(?:Hello from Hail|This is a delivery check|Hail is checking this inbox)\. Ref: [a-f0-9-]+$/,
+        );
+        expectedResult = [
+          "PASS: one synthetic message reached the intended Hail inbox.",
+          "Received email:",
+          "  From: sender@example.test",
+          `  To: ${to}`,
+          `  Subject: ${subject}`,
+          `  Text: ${body}`,
+        ].join("\n");
         addresses.add(to);
         store.add(
           to,
@@ -36,10 +48,8 @@ test("smoke uses a new in-domain recipient and matches sender, subject, and body
         );
       },
     );
-    assert.equal(
-      result,
-      "PASS: one synthetic message reached the intended Hail inbox.",
-    );
+    assert.equal(result, expectedResult);
+    assert.doesNotMatch(result, /wrong marker|wrong@example.test/);
   }
   assert.equal(addresses.size, 2);
 });

@@ -63,6 +63,17 @@ hail smoke --from verified-sender@example.com
 hail smoke --from verified-sender@example.com --profile hail-test
 ```
 
-The command reads `hail.config.json` (or `HAIL_CONFIG` / `--config`) for the receiver domain, bucket, region, and optional reader role. It uses the normal AWS SDK credential chain by default. `--profile` selects a named AWS profile for sending and, when configured, assuming the reader role. The selected credentials need `ses:SendRawEmail` for the verified sender and test domain; they also need S3 list/get access or `sts:AssumeRole` for the configured reader role. The SES client makes one API attempt. `--timeout-ms` bounds the receipt wait to 5–120 seconds (60 seconds by default), and at most five matching messages are inspected. The result never prints the inbox address, message body, raw MIME, or credentials.
+A successful check prints the message that was confirmed in the generated inbox:
+
+```text
+PASS: one synthetic message reached the intended Hail inbox.
+Received email:
+  From: verified-sender@example.com
+  To: smoke-<random>@email-test.example.com
+  Subject: Hail smoke <unique-id>
+  Text: Hello from Hail. Ref: <unique-id>
+```
+
+The command reads `hail.config.json` (or `HAIL_CONFIG` / `--config`) for the receiver domain, bucket, region, and optional reader role. It uses the normal AWS SDK credential chain by default. `--profile` selects a named AWS profile for sending and, when configured, assuming the reader role. The selected credentials need `ses:SendRawEmail` for the verified sender and test domain; they also need S3 list/get access or `sts:AssumeRole` for the configured reader role. The SES client makes one API attempt. `--timeout-ms` bounds the receipt wait to 5–120 seconds (60 seconds by default), and at most five matching messages are inspected. The success result prints only the verified synthetic message fields shown above. Failures never print arbitrary received mail, raw MIME, authentication links, or credentials.
 
 The sender identity must be verified in the receiver's configured AWS region. In the SES sandbox, the recipient domain must also be verified there; otherwise request production sending access. On timeout, inspect MX, receipt-rule ordering, pipeline health, and the ingestion DLQ with a separate diagnostics identity. A timeout alone cannot distinguish SMTP receipt failure from ingestion delay. Check that the DLQ remains empty after a successful live smoke run. `doctor` stays read-only; `test:live` exercises browser workflows, while `test:live:full` provisions a disposable receiver.

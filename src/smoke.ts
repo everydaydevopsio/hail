@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { SESClient, SendRawEmailCommand } from "@aws-sdk/client-ses";
 import { S3Client } from "@aws-sdk/client-s3";
 import {
@@ -11,6 +11,11 @@ import { normalizeAddress, type HailConfig } from "./config.js";
 import { S3MailStore } from "./store.js";
 
 const pass = "PASS: one synthetic message reached the intended Hail inbox.";
+const shortTexts = [
+  "Hello from Hail",
+  "This is a delivery check",
+  "Hail is checking this inbox",
+] as const;
 
 export async function runSmoke(
   hail: Hail,
@@ -23,7 +28,7 @@ export async function runSmoke(
   const after = await inbox.checkpoint();
   const marker = randomUUID();
   const subject = `Hail smoke ${marker}`;
-  const body = `Synthetic Hail delivery check: ${marker}`;
+  const body = `${shortTexts[randomInt(shortTexts.length)]}. Ref: ${marker}`;
   await send(inbox.address, subject, body);
   const deadline = Date.now() + timeoutMs;
   for (let inspected = 0; inspected < 5; inspected++) {
@@ -37,7 +42,14 @@ export async function runSmoke(
       pollIntervalMs: 500,
     });
     if (message.recipient === inbox.address && message.text.trim() === body)
-      return pass;
+      return [
+        pass,
+        "Received email:",
+        `  From: ${message.from}`,
+        `  To: ${message.recipient}`,
+        `  Subject: ${message.subject}`,
+        `  Text: ${message.text.trim()}`,
+      ].join("\n");
   }
   throw new Error("Too many nonmatching messages.");
 }

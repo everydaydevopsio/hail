@@ -1,4 +1,23 @@
-# Task: simplify issue #26 smoke invocation
+# Task: show verified synthetic email in smoke output
+
+## Context and plan
+
+- Date: 2026-10-10. Mode: autonomous local output improvement. PRD: SMOKE-02.
+- Generate one short harmless text phrase plus the unique marker; display From, To, Subject, and Text only after the received mail passes exact matching. Failure output remains fixed and redacted.
+- Verify success details come from the confirmed received message, and mismatched mail never appears in output. Run local build, typecheck, unit, lint, formatting, package, and coverage checks. Rollback: revert this commit; no cloud operation.
+
+## Checklist
+
+- [x] Update output, docs, and tests.
+- [x] Run local checks and record results.
+- [x] Commit the change.
+
+## Outcome
+
+- Success now prints the exact synthetic From, recipient, subject, and short generated text from the matched received email. The generator chooses one of three harmless phrases and adds a unique reference marker. Wrong sender/body messages remain excluded; failure output remains redacted.
+- Build, typecheck, lint, Prettier, package audit, 51 Node tests, 42 Python tests, and coverage passed (92.83% lines). Browser and Terraform behavior is unchanged; prior branch checks apply. No new real email was sent.
+
+# Previous task: simplify issue #26 smoke invocation
 
 ## Context and plan
 
