@@ -4,6 +4,7 @@ Record repeatable failure patterns and the test or gate that catches them here.
 
 - A new SES operator command must use the action allowed by the existing restricted sender policy. The live role grants `ses:SendRawEmail`; review IAM scope before choosing the SES SDK command.
 - Node subprocess coverage and browser startup can fail under the command sandbox while ordinary unit tests pass. Re-run the exact affected gate outside the sandbox after an `EPERM` or browser sandbox error, and report missing host browser libraries separately.
+- An expected IAM role ARN is caller-supplied evidence. Validate its account and role name against STS, and compare actual STS role IDs when enforcing reader/sender separation. Recheck credential expiration after setup work so the advertised wait remains available.
 
 - Replacing top-level CLI help while adding subcommand help can silently remove existing usage details. Keep the top-level help regression test and check it alongside each new command help path.
 

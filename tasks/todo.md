@@ -18,6 +18,8 @@
 - `hail smoke` uses separate STS-verified reader/sender sessions, one random inbox, one `SendRawEmail` API attempt, and a bounded wait for exact sender, subject, recipient, and body marker. Local tests cover uniqueness, mismatches, timeout, and safe error output.
 - Build, typecheck, lint, Prettier, 50 Node tests, 42 Python tests, package audit, and all five Terraform validate/mock roots passed. Coverage: 88.07% lines, 86.94% branches, 94.03% functions. Chromium and Firefox passed 9/9 each outside the sandbox; full WebKit requires missing host libraries. Terraform still reports the preexisting provider deprecation tracked in #25.
 - A real send/read and empty-DLQ check were not run because this task did not explicitly authorize sending real email. Live evidence remains required before claiming cloud delivery. Rollback is a revert of this branch commit; implementation changed no cloud state.
+- Bosun review of `149a1a1` against the default-branch fork point found two valid medium issues: caller-supplied ARN account was not checked against STS, and credential lifetime was checked too early. A follow-up commit validates the actual STS role IDs/account and rechecks lifetime immediately before sending; focused tests cover both failures.
+- After the Bosun fixes, build, typecheck, lint, Prettier, package audit, 52 Node tests, and coverage passed (88.05% lines, 86.59% branches, 94.29% functions). Browser, Python, and Terraform results above remain valid because the follow-up changes only the smoke credential checks and their local tests.
 
 # Previous task: issue #24 subcommand help
 

@@ -2,7 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Hail } from "../../src/index.js";
 import { MemoryStore, config } from "../helpers/memory-store.js";
-import { runSmoke, smokeFailure } from "../../src/smoke.js";
+import {
+  runSmoke,
+  smokeFailure,
+  verifiedRoleId,
+  requireSessionLifetime,
+  assertDistinctRoleIds,
+} from "../../src/smoke.js";
 
 test("smoke uses a new in-domain recipient and matches sender, subject, and body", async () => {
   const store = new MemoryStore();
@@ -65,5 +71,50 @@ test("smoke times out and diagnostics never include message content or credentia
   assert.equal(
     smokeFailure(new Error(secret)),
     "FAIL: smoke check failed; inspect restricted credentials and receiver health.",
+  );
+});
+
+test("restricted identity checks ARN account and actual role IDs", () => {
+  const expected = "arn:aws:iam::123456789012:role/hail-reader";
+  const actual = "arn:aws:sts::123456789012:assumed-role/hail-reader/run";
+  assert.equal(
+    verifiedRoleId(
+      expected,
+      "123456789012",
+      actual,
+      "123456789012",
+      "AROA123:run",
+    ),
+    "AROA123",
+  );
+  assert.throws(() =>
+    verifiedRoleId(
+      "arn:aws:iam::999999999999:role/hail-reader",
+      "123456789012",
+      actual,
+      "123456789012",
+      "AROA123:run",
+    ),
+  );
+  assert.throws(() =>
+    verifiedRoleId(
+      expected,
+      "123456789012",
+      actual,
+      "123456789012",
+      "bad-user-id",
+    ),
+  );
+  assert.throws(() => assertDistinctRoleIds("AROA123", "AROA123"));
+  assert.doesNotThrow(() => assertDistinctRoleIds("AROA123", "AROA456"));
+});
+
+test("session lifetime is checked again after setup for the send and receipt wait", () => {
+  const now = Date.now();
+  assert.throws(() =>
+    requireSessionLifetime(new Date(now + 65_000), 60_000, now),
+  );
+  assert.doesNotThrow(() =>
+    requireSessionLifetime(new Date(now + 91_000), 60_000, now),
   );
 });

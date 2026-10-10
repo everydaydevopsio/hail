@@ -58,8 +58,60 @@ export function smokeFailure(error: unknown): string {
 
 interface RestrictedSession {
   credentials: AwsCredentialIdentity;
-  account: string;
-  roleArn: string;
+  roleId: string;
+  expiration: Date;
+}
+
+export function requireSessionLifetime(
+  expiration: Date,
+  neededMs: number,
+  now = Date.now(),
+): void {
+  if (
+    !Number.isFinite(expiration.getTime()) ||
+    expiration.getTime() < now + neededMs + 30_000
+  )
+    throw new Error("Restricted session expires before the smoke deadline.");
+}
+
+export function verifiedRoleId(
+  expectedRoleArn: string,
+  expectedAccount: string,
+  actualArn: string | undefined,
+  actualAccount: string | undefined,
+  userId: string | undefined,
+): string {
+  const expected =
+    /^arn:(aws(?:-us-gov|-cn)?):iam::(\d{12}):role\/(?:[A-Za-z0-9_+=,.@-]+\/)*([A-Za-z0-9_+=,.@-]+)$/.exec(
+      expectedRoleArn,
+    );
+  const actual =
+    /^arn:(aws(?:-us-gov|-cn)?):sts::(\d{12}):assumed-role\/([^/]+)\/[^/]+$/.exec(
+      actualArn ?? "",
+    );
+  const roleId = /^(AROA[A-Z0-9]+):[^:]+$/.exec(userId ?? "")?.[1];
+  if (
+    !expected ||
+    !actual ||
+    !roleId ||
+    expected[1] !== actual[1] ||
+    expected[2] !== expectedAccount ||
+    actual[2] !== expectedAccount ||
+    actualAccount !== expectedAccount ||
+    expected[3] !== actual[3]
+  )
+    throw new Error(
+      "Restricted session identity did not match the expected role and account.",
+    );
+  return roleId;
+}
+
+export function assertDistinctRoleIds(
+  readerRoleId: string,
+  senderRoleId: string,
+): void {
+  if (readerRoleId === senderRoleId)
+    throw new Error("Reader and sender sessions use the same AWS role.");
 }
 
 async function restrictedSession(
@@ -88,10 +140,10 @@ async function restrictedSession(
     typeof data.accessKeyId !== "string" ||
     typeof data.secretAccessKey !== "string" ||
     typeof data.sessionToken !== "string" ||
-    !Number.isFinite(expiration) ||
-    expiration < Date.now() + timeoutMs + 30_000
+    !Number.isFinite(expiration)
   )
     throw new Error("Restricted session is missing or expires too soon.");
+  requireSessionLifetime(new Date(expiration), timeoutMs);
   const credentials: AwsCredentialIdentity = {
     accessKeyId: data.accessKeyId,
     secretAccessKey: data.secretAccessKey,
@@ -105,21 +157,17 @@ async function restrictedSession(
   }).send(new GetCallerIdentityCommand({}), {
     abortSignal: AbortSignal.timeout(10_000),
   });
-  const roleName = expectedRoleArn.split("/").at(-1);
-  const partition = expectedRoleArn.split(":")[1];
-  if (
-    !/^arn:aws(?:-us-gov|-cn)?:iam::\d{12}:role\/.+$/.test(expectedRoleArn) ||
-    !/^\d{12}$/.test(expectedAccount) ||
-    !roleName ||
-    identity.Account !== expectedAccount ||
-    !identity.Arn?.startsWith(
-      `arn:${partition}:sts::${expectedAccount}:assumed-role/${roleName}/`,
-    )
-  )
-    throw new Error(
-      "Restricted session identity did not match the expected role and account.",
-    );
-  return { credentials, roleArn: expectedRoleArn, account: expectedAccount };
+  return {
+    credentials,
+    roleId: verifiedRoleId(
+      expectedRoleArn,
+      expectedAccount,
+      identity.Arn,
+      identity.Account,
+      identity.UserId,
+    ),
+    expiration: new Date(expiration),
+  };
 }
 
 export interface SmokeOptions {
@@ -162,10 +210,7 @@ export async function smoke(options: SmokeOptions): Promise<string> {
     options.sendRegion,
     options.timeoutMs,
   );
-  if (reader.account !== sender.account || reader.roleArn === sender.roleArn)
-    throw new Error(
-      "Reader and sender identities must be separate in one account.",
-    );
+  assertDistinctRoleIds(reader.roleId, sender.roleId);
   const directConfig = { ...options.config, roleArn: undefined };
   const hail = new Hail(
     directConfig,
@@ -189,6 +234,8 @@ export async function smoke(options: SmokeOptions): Promise<string> {
       from,
       options.timeoutMs,
       async (to, subject, body) => {
+        requireSessionLifetime(reader.expiration, options.timeoutMs);
+        requireSessionLifetime(sender.expiration, 20_000);
         try {
           const raw = [
             `From: ${from}`,
