@@ -2,6 +2,8 @@
 
 Record repeatable failure patterns and the test or gate that catches them here.
 
+- Replacing top-level CLI help while adding subcommand help can silently remove existing usage details. Keep the top-level help regression test and check it alongside each new command help path.
+
 - A grouped major dependency bump can select a compiler newer than its lint parser supports. Dependabot's TypeScript 7 update failed `npm ci` because `typescript-eslint` 8 accepts TypeScript below 6.1. Keep compiler updates within the parser's peer range and use the repository's minimum Node major for published `@types/node` declarations.
 
 - A deadline can coincide with an unrelated S3 failure. The negative-email regression waits past the deadline and requires the storage error to propagate.

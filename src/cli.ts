@@ -14,7 +14,12 @@ import { S3MailStore, awsCredentials } from "./store.js";
 import { scaffold, validateInit, type InitOptions } from "./setup.js";
 
 const execute = promisify(execFile);
-const help = `Hail: Send. Receive. Verify.\n\nCommands:\n  hail init --dns cloudflare|route53|manual --domain email-test.example.com\n    --zone-name example.com [--zone-id ID] --region us-east-1\n    (--existing-rule-set NAME | --activate-new-rule-set) [--out infra/hail] [--file main.tf] [--local-modules]\n  hail configure --terraform-dir infra/hail [--out hail.config.json]\n  hail doctor [--config hail.config.json]\n\ninit generates Terraform pinned to the installed Hail version unless --local-modules is set. It never runs terraform apply.\nconfigure reads Terraform outputs; doctor never sends email.\n`;
+const help = `Hail: Send. Receive. Verify.\n\nCommands:\n  hail init --dns cloudflare|route53|manual --domain email-test.example.com\n    --zone-name example.com [--zone-id ID] --region us-east-1\n    (--existing-rule-set NAME | --activate-new-rule-set) [--out infra/hail] [--file main.tf] [--local-modules]\n  hail configure --terraform-dir infra/hail [--out hail.config.json]\n  hail doctor [--config hail.config.json]\n\nRun hail <command> --help for options and an example.\ninit generates Terraform pinned to the installed Hail version unless --local-modules is set. It never runs terraform apply.\nconfigure reads Terraform outputs; doctor never sends email.\n`;
+const commandHelp: Record<string, string> = {
+  init: `Usage: hail init --domain DOMAIN --zone-name ZONE (--existing-rule-set NAME | --activate-new-rule-set) [options]\n\nOptions:\n  --domain DOMAIN              Dedicated test subdomain (required)\n  --zone-name ZONE             Authoritative parent DNS zone (required)\n  --dns cloudflare|route53|manual  DNS mode (default: manual)\n  --zone-id ID                 Required for cloudflare or route53; omit for manual\n  --region REGION              SES receiving region (default: us-east-1)\n  --name NAME                  Resource name (default: hail)\n  --existing-rule-set NAME     Use the named active SES rule set (choose one)\n  --activate-new-rule-set      Activate a new set only if none is active (choose one)\n  --out DIR                    Output directory (default: infra/hail)\n  --file NAME.tf               Terraform filename (default: main.tf)\n  --local-modules              Copy the bundled module (default: pinned Git tag)\n  -h, --help                   Show this help\n\nExample:\n  hail init --dns manual --domain email-test.example.com --zone-name example.com --existing-rule-set shared-inbound\n\ninit checks DNS and AWS before writing files; it never applies Terraform.\n`,
+  configure: `Usage: hail configure --terraform-dir DIR [--out FILE]\n\nOptions:\n  --terraform-dir DIR  Terraform root with hail_config output (required)\n  --out FILE           Configuration file (default: hail.config.json)\n  -h, --help           Show this help\n\nExample:\n  hail configure --terraform-dir infra/hail\n\nconfigure runs terraform output and refuses to overwrite an existing file.\n`,
+  doctor: `Usage: hail doctor [--config FILE]\n\nOptions:\n  --config FILE  Configuration file (default: HAIL_CONFIG or hail.config.json)\n  -h, --help     Show this help\n\nExample:\n  hail doctor --config hail.config.json\n\ndoctor checks DNS, SES, and S3 read access; it does not send email.\n`,
+};
 
 async function activeRules(
   region: string,
@@ -144,29 +149,59 @@ async function doctor(config: HailConfig) {
 
 async function main() {
   const [command, ...args] = process.argv.slice(2);
-  if (!command || command === "--help" || command === "help") {
+  if (
+    !command ||
+    command === "--help" ||
+    command === "-h" ||
+    command === "help"
+  ) {
     console.log(help);
     return;
   }
-  const { values } = parseArgs({
-    args,
-    options: {
-      dns: { type: "string" },
-      domain: { type: "string" },
-      "zone-name": { type: "string" },
-      "zone-id": { type: "string" },
-      region: { type: "string" },
-      name: { type: "string" },
-      out: { type: "string" },
-      file: { type: "string" },
-      "local-modules": { type: "boolean" },
-      "existing-rule-set": { type: "string" },
-      "activate-new-rule-set": { type: "boolean" },
-      "terraform-dir": { type: "string" },
-      config: { type: "string" },
-    },
-  });
+  if (!Object.hasOwn(commandHelp, command))
+    throw new Error("Unknown command. Run hail --help.");
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(commandHelp[command]);
+    return;
+  }
+  const values = (() => {
+    try {
+      return parseArgs({
+        args,
+        options: {
+          dns: { type: "string" },
+          domain: { type: "string" },
+          "zone-name": { type: "string" },
+          "zone-id": { type: "string" },
+          region: { type: "string" },
+          name: { type: "string" },
+          out: { type: "string" },
+          file: { type: "string" },
+          "local-modules": { type: "boolean" },
+          "existing-rule-set": { type: "string" },
+          "activate-new-rule-set": { type: "boolean" },
+          "terraform-dir": { type: "string" },
+          config: { type: "string" },
+        },
+      }).values;
+    } catch (error) {
+      if (
+        error instanceof TypeError &&
+        "code" in error &&
+        typeof error.code === "string" &&
+        error.code.startsWith("ERR_PARSE_ARGS_")
+      )
+        throw new Error(`${error.message} Run hail ${command} --help.`, {
+          cause: error,
+        });
+      throw error;
+    }
+  })();
   if (command === "init") {
+    if (!values.domain)
+      throw new Error("init requires --domain. Run hail init --help.");
+    if (!values["zone-name"])
+      throw new Error("init requires --zone-name. Run hail init --help.");
     const options = validateInit({
       dns: (values.dns ?? "manual") as InitOptions["dns"],
       domain: values.domain ?? "",
@@ -214,7 +249,7 @@ async function main() {
     console.log(`Wrote ${destination}. Existing files are never overwritten.`);
   } else if (command === "doctor") {
     await doctor(await loadConfig(values.config));
-  } else throw new Error("Unknown command. Run hail --help.");
+  }
 }
 main().catch((error) => {
   const known = error instanceof Error && error.name === "Error";

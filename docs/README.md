@@ -1,6 +1,7 @@
 # Hail documentation
 
 - [AWS quickstart](QUICKSTART.md): first receiver and workflow test.
+- [CLI reference](CLI.md): commands, flags, defaults, and examples.
 - [Local development](DEVELOPMENT.md): `make deps`, `make setup`, shell, hooks, checks.
 - [npm releases](RELEASING.md): trusted publishing setup, manual dispatch, and recovery.
 - [Architecture](ARCHITECTURE.md): receipt flow and stored message metadata.
