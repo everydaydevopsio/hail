@@ -1,4 +1,25 @@
-# Task: issue #24 subcommand help
+# Task: issue #26 delivery smoke
+
+## Context and plan
+
+- Date: 2026-10-10. Mode: implementation authorized by user; live send requires separate explicit authorization. PRD: SMOKE-01/02.
+- Add a bounded CLI command using distinct restricted reader/sender sessions and one synthetic SES send. Keep the browser suites, doctor, and Terraform behavior unchanged.
+- Risk: SES and S3 permissions or routing may fail independently. Report only supported diagnoses. Rollback: revert the branch commit; no cloud state changes from implementation.
+
+## Checklist
+
+- [x] Write failing local tests for uniqueness, exact matching, timeout, and safe output.
+- [x] Implement CLI and documentation.
+- [x] Run build, typecheck, unit, Python, browser, Terraform validate/mock, coverage, then Bosun review.
+- [x] Record test outcomes and live verification gap.
+
+## Outcome
+
+- `hail smoke` uses separate STS-verified reader/sender sessions, one random inbox, one `SendRawEmail` API attempt, and a bounded wait for exact sender, subject, recipient, and body marker. Local tests cover uniqueness, mismatches, timeout, and safe error output.
+- Build, typecheck, lint, Prettier, 50 Node tests, 42 Python tests, package audit, and all five Terraform validate/mock roots passed. Coverage: 88.07% lines, 86.94% branches, 94.03% functions. Chromium and Firefox passed 9/9 each outside the sandbox; full WebKit requires missing host libraries. Terraform still reports the preexisting provider deprecation tracked in #25.
+- A real send/read and empty-DLQ check were not run because this task did not explicitly authorize sending real email. Live evidence remains required before claiming cloud delivery. Rollback is a revert of this branch commit; implementation changed no cloud state.
+
+# Previous task: issue #24 subcommand help
 
 ## Context
 

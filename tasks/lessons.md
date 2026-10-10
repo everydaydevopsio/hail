@@ -2,6 +2,9 @@
 
 Record repeatable failure patterns and the test or gate that catches them here.
 
+- A new SES operator command must use the action allowed by the existing restricted sender policy. The live role grants `ses:SendRawEmail`; review IAM scope before choosing the SES SDK command.
+- Node subprocess coverage and browser startup can fail under the command sandbox while ordinary unit tests pass. Re-run the exact affected gate outside the sandbox after an `EPERM` or browser sandbox error, and report missing host browser libraries separately.
+
 - Replacing top-level CLI help while adding subcommand help can silently remove existing usage details. Keep the top-level help regression test and check it alongside each new command help path.
 
 - A grouped major dependency bump can select a compiler newer than its lint parser supports. Dependabot's TypeScript 7 update failed `npm ci` because `typescript-eslint` 8 accepts TypeScript below 6.1. Keep compiler updates within the parser's peer range and use the repository's minimum Node major for published `@types/node` declarations.

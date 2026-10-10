@@ -22,9 +22,10 @@ test("CLI help lists real commands and makes no network requests", async () => {
   assert.match(result.stdout, /--local-modules/);
   assert.match(result.stdout, /hail configure/);
   assert.match(result.stdout, /hail doctor/);
+  assert.match(result.stdout, /hail smoke/);
 });
 test("issue #24: subcommand help describes options without credentials or network", async () => {
-  for (const command of ["init", "configure", "doctor"]) {
+  for (const command of ["init", "configure", "doctor", "smoke"]) {
     for (const flag of ["--help", "-h"]) {
       const { stdout, stderr } = await run([command, flag], {
         env: {
@@ -50,6 +51,10 @@ test("issue #24: subcommand help describes options without credentials or networ
     /--terraform-dir.*required/,
   );
   assert.match((await run(["doctor", "--help"])).stdout, /HAIL_CONFIG/);
+  assert.match(
+    (await run(["smoke", "--help"])).stdout,
+    /--reader-session-file/,
+  );
 });
 test("issue #24: invalid and missing options identify their flags", async () => {
   for (const args of [

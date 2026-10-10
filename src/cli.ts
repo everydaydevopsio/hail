@@ -14,11 +14,12 @@ import { S3MailStore, awsCredentials } from "./store.js";
 import { scaffold, validateInit, type InitOptions } from "./setup.js";
 
 const execute = promisify(execFile);
-const help = `Hail: Send. Receive. Verify.\n\nCommands:\n  hail init --dns cloudflare|route53|manual --domain email-test.example.com\n    --zone-name example.com [--zone-id ID] --region us-east-1\n    (--existing-rule-set NAME | --activate-new-rule-set) [--out infra/hail] [--file main.tf] [--local-modules]\n  hail configure --terraform-dir infra/hail [--out hail.config.json]\n  hail doctor [--config hail.config.json]\n\nRun hail <command> --help for options and an example.\ninit generates Terraform pinned to the installed Hail version unless --local-modules is set. It never runs terraform apply.\nconfigure reads Terraform outputs; doctor never sends email.\n`;
+const help = `Hail: Send. Receive. Verify.\n\nCommands:\n  hail init --dns cloudflare|route53|manual --domain email-test.example.com\n    --zone-name example.com [--zone-id ID] --region us-east-1\n    (--existing-rule-set NAME | --activate-new-rule-set) [--out infra/hail] [--file main.tf] [--local-modules]\n  hail configure --terraform-dir infra/hail [--out hail.config.json]\n  hail doctor [--config hail.config.json]\n  hail smoke --from SENDER --send-region REGION --account ACCOUNT\n    --reader-role-arn ARN --sender-role-arn ARN --reader-session-file FILE --sender-session-file FILE\n\nRun hail <command> --help for options and an example.\ninit generates Terraform pinned to the installed Hail version unless --local-modules is set. It never runs terraform apply.\nconfigure reads Terraform outputs; doctor never sends email. smoke sends one synthetic message only when invoked.\n`;
 const commandHelp: Record<string, string> = {
   init: `Usage: hail init --domain DOMAIN --zone-name ZONE (--existing-rule-set NAME | --activate-new-rule-set) [options]\n\nOptions:\n  --domain DOMAIN              Dedicated test subdomain (required)\n  --zone-name ZONE             Authoritative parent DNS zone (required)\n  --dns cloudflare|route53|manual  DNS mode (default: manual)\n  --zone-id ID                 Required for cloudflare or route53; omit for manual\n  --region REGION              SES receiving region (default: us-east-1)\n  --name NAME                  Resource name (default: hail)\n  --existing-rule-set NAME     Use the named active SES rule set (choose one)\n  --activate-new-rule-set      Activate a new set only if none is active (choose one)\n  --out DIR                    Output directory (default: infra/hail)\n  --file NAME.tf               Terraform filename (default: main.tf)\n  --local-modules              Copy the bundled module (default: pinned Git tag)\n  -h, --help                   Show this help\n\nExample:\n  hail init --dns manual --domain email-test.example.com --zone-name example.com --existing-rule-set shared-inbound\n\ninit checks DNS and AWS before writing files; it never applies Terraform.\n`,
   configure: `Usage: hail configure --terraform-dir DIR [--out FILE]\n\nOptions:\n  --terraform-dir DIR  Terraform root with hail_config output (required)\n  --out FILE           Configuration file (default: hail.config.json)\n  -h, --help           Show this help\n\nExample:\n  hail configure --terraform-dir infra/hail\n\nconfigure runs terraform output and refuses to overwrite an existing file.\n`,
   doctor: `Usage: hail doctor [--config FILE]\n\nOptions:\n  --config FILE  Configuration file (default: HAIL_CONFIG or hail.config.json)\n  -h, --help     Show this help\n\nExample:\n  hail doctor --config hail.config.json\n\ndoctor checks DNS, SES, and S3 read access; it does not send email.\n`,
+  smoke: `Usage: hail smoke --from ADDRESS --send-region REGION --account ACCOUNT --reader-role-arn ARN --sender-role-arn ARN --reader-session-file FILE --sender-session-file FILE [--config FILE] [--timeout-ms MS]\n\nOptions:\n  --from ADDRESS              Verified SES sender (required)\n  --send-region REGION        SES sending region (required)\n  --account ACCOUNT           Expected 12-digit AWS account (required)\n  --reader-role-arn ARN       Restricted reader role (required)\n  --sender-role-arn ARN       Distinct restricted sender role (required)\n  --reader-session-file FILE  Owner-only short-lived reader session (required)\n  --sender-session-file FILE  Owner-only short-lived sender session (required)\n  --config FILE               Receiver config (default: HAIL_CONFIG or hail.config.json)\n  --timeout-ms MS             Receipt wait, 5000-120000 (default: 60000)\n  -h, --help                  Show this help\n\nExample:\n  hail smoke --from sender@example.com --send-region us-east-1 --account 123456789012 --reader-role-arn arn:aws:iam::123456789012:role/hail-reader --sender-role-arn arn:aws:iam::123456789012:role/hail-sender --reader-session-file /private/reader.json --sender-session-file /private/sender.json\n\nOnly explicit invocation sends one synthetic message.\n`,
 };
 
 async function activeRules(
@@ -182,6 +183,14 @@ async function main() {
           "activate-new-rule-set": { type: "boolean" },
           "terraform-dir": { type: "string" },
           config: { type: "string" },
+          from: { type: "string" },
+          "send-region": { type: "string" },
+          account: { type: "string" },
+          "reader-role-arn": { type: "string" },
+          "sender-role-arn": { type: "string" },
+          "reader-session-file": { type: "string" },
+          "sender-session-file": { type: "string" },
+          "timeout-ms": { type: "string" },
         },
       }).values;
     } catch (error) {
@@ -249,6 +258,41 @@ async function main() {
     console.log(`Wrote ${destination}. Existing files are never overwritten.`);
   } else if (command === "doctor") {
     await doctor(await loadConfig(values.config));
+  } else if (command === "smoke") {
+    const { smoke, smokeFailure } = await import("./smoke.js");
+    for (const flag of [
+      "from",
+      "send-region",
+      "account",
+      "reader-role-arn",
+      "sender-role-arn",
+      "reader-session-file",
+      "sender-session-file",
+    ] as const)
+      if (!values[flag])
+        throw new Error(`smoke requires --${flag}. Run hail smoke --help.`);
+    const timeoutMs =
+      values["timeout-ms"] === undefined
+        ? 60_000
+        : Number(values["timeout-ms"]);
+    try {
+      console.log(
+        await smoke({
+          config: await loadConfig(values.config),
+          from: values.from!,
+          sendRegion: values["send-region"]!,
+          account: values.account!,
+          readerRoleArn: values["reader-role-arn"]!,
+          senderRoleArn: values["sender-role-arn"]!,
+          readerSessionFile: values["reader-session-file"]!,
+          senderSessionFile: values["sender-session-file"]!,
+          timeoutMs,
+        }),
+      );
+    } catch (error) {
+      console.error(smokeFailure(error));
+      process.exitCode = 1;
+    }
   }
 }
 main().catch((error) => {

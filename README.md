@@ -16,7 +16,7 @@ Start with the [AWS quickstart](docs/QUICKSTART.md) to deploy with Cloudflare an
 
 - TypeScript email client with unique inboxes, checkpoints, sender/subject filters, bounded waits, message consumption, pagination, and legacy SES-client storage support.
 - Playwright `hail` and `inbox` fixtures. Link extraction parses HTML, requires allowed origins, and never fetches the link.
-- `hail init`, `hail configure`, and read-only `hail doctor` commands.
+- `hail init`, `hail configure`, read-only `hail doctor`, and opt-in `hail smoke` commands.
 - Terraform receiver and Cloudflare, Route53, and manual-DNS templates. No long-lived server, database, or Kubernetes cluster.
 - One retryable SES → S3/SNS → SQS → Lambda ingestion path. The worker retains raw MIME and publishes idempotent recipient metadata. Failed records reach the ingestion DLQ.
 - Unit, Python worker, Terraform mock, package, and Chromium/Firefox/WebKit workflow tests.
@@ -95,6 +95,8 @@ npx hail doctor
 Manual DNS mode prints the required MX and TXT records with `terraform output dns_records`. Publish them before running `doctor`. Managed modes wait for SES identity verification, which can take time after DNS changes. DNS tokens and AWS credentials never belong in tfvars or Git.
 
 `doctor` checks resolved MX, SES identity, the active domain/bucket receipt rule, and S3 listing access. It does **not** verify all preceding SES rules, queue health, raw-object read permissions, or actual delivery. Use the live test gate and check the DLQ before calling a deployment validated.
+
+For an already deployed receiver, [`hail smoke`](docs/CLI.md#hail-smoke) sends one synthetic message to a fresh test inbox with separate short-lived sender and reader credentials, waits up to a configured deadline, and checks its content. It is invoked explicitly and never runs in `doctor` or ordinary CI. Check the ingestion DLQ separately after a live run.
 
 ## Write a Playwright test
 
