@@ -72,8 +72,8 @@
     }
   },
   "devDependencies": {
-    "@aws-sdk/client-sts": "3.1146.0",
-    "@aws-sdk/types": "3.974.6",
+    "@aws-sdk/client-sts": "3.1156.0",
+    "@aws-sdk/types": "3.975.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.55.0",
     "@types/mailparser": "^3.4.6",
